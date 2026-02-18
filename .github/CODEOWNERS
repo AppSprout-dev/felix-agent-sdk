@@ -1,0 +1,17 @@
+# Felix Agent SDK — Code Ownership
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Core Felix modules — require Caleb's review
+/src/felix_agent_sdk/core/           @CalebisGross
+/src/felix_agent_sdk/agents/         @CalebisGross
+/src/felix_agent_sdk/communication/  @CalebisGross
+/src/felix_agent_sdk/memory/         @CalebisGross
+/src/felix_agent_sdk/spawning/       @CalebisGross
+/src/felix_agent_sdk/workflows/      @CalebisGross
+
+# Provider layer
+/src/felix_agent_sdk/providers/      @jkbennitt
+
+# Package infrastructure
+pyproject.toml                        @CalebisGross @jkbennitt
+.github/                              @jkbennitt

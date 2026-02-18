@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# mypy
+.mypy_cache/
+.dmypy.json
+
+# pytest
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Docs
+site/
+docs/_build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Databases
+*.db
+
+# Internal design docs (not for public repo)
+felix-agent-sdk-structure.md
+
+# Original monolith (split into src/felix_agent_sdk/providers/)
+felix_providers.py

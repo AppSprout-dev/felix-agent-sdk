@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "felix-agent-sdk"
+dynamic = ["version"]
+description = "Helical multi-agent orchestration framework"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "AppSprout", email = "team@appsprout.com" },
+]
+keywords = [
+    "ai", "agents", "multi-agent", "orchestration", "llm",
+    "helix", "felix", "framework",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "pydantic>=2.0",
+    "httpx>=0.24",
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.30"]
+openai = ["openai>=1.0"]
+local = ["openai>=1.0"]
+bedrock = ["boto3>=1.28"]
+vertex = ["google-cloud-aiplatform>=1.36"]
+all = [
+    "anthropic>=0.30",
+    "openai>=1.0",
+    "boto3>=1.28",
+    "google-cloud-aiplatform>=1.36",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+    "mypy>=1.5",
+    "mkdocs-material>=9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/AppSprout-dev/felix-agent-sdk"
+Documentation = "https://felix-sdk.appsprout.dev"
+Repository = "https://github.com/AppSprout-dev/felix-agent-sdk"
+Issues = "https://github.com/AppSprout-dev/felix-agent-sdk/issues"
+
+[tool.hatch.version]
+path = "src/felix_agent_sdk/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/felix_agent_sdk"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
