@@ -1,6 +1,7 @@
 """Felix core helix geometry — parametric 3D spiral for agent positioning.
 
 Ported from CalebisGross/felix src/core/helix_geometry.py.
+Extended with HelixConfig presets and HelixPosition phase-aware wrapper.
 
 Mathematical Foundation:
     Parametric helix with exponential radius tapering (wider at top, narrower at bottom).
@@ -14,7 +15,18 @@ Mathematical Foundation:
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import Tuple
+
+# ---------------------------------------------------------------------------
+# Phase boundary constants
+# ---------------------------------------------------------------------------
+
+EXPLORATION_END: float = 0.4
+"""t values below this are in the exploration phase."""
+
+ANALYSIS_END: float = 0.7
+"""t values below this (and >= EXPLORATION_END) are in the analysis phase."""
 
 
 class HelixGeometry:
@@ -192,4 +204,163 @@ class HelixGeometry:
             f"HelixGeometry(top_radius={self.top_radius}, "
             f"bottom_radius={self.bottom_radius}, "
             f"height={self.height}, turns={self.turns})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# HelixConfig
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class HelixConfig:
+    """Immutable configuration bundle for a HelixGeometry instance.
+
+    Provides named presets for common agent-workflow geometries and a
+    factory method to produce a HelixGeometry from the stored parameters.
+    """
+
+    top_radius: float
+    bottom_radius: float
+    height: float
+    turns: float
+
+    def to_geometry(self) -> HelixGeometry:
+        """Construct a HelixGeometry instance from this config."""
+        return HelixGeometry(
+            top_radius=self.top_radius,
+            bottom_radius=self.bottom_radius,
+            height=self.height,
+            turns=int(self.turns),
+        )
+
+    @classmethod
+    def default(cls) -> HelixConfig:
+        """Balanced general-purpose geometry.
+
+        top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2.
+        Taper ratio 6x. Two full spirals from exploration to synthesis.
+        """
+        return cls(top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2.0)
+
+    @classmethod
+    def research_heavy(cls) -> HelixConfig:
+        """Wide exploration with extended spiral for deep research workflows.
+
+        top_radius=5.0, bottom_radius=0.5, height=10.0, turns=3.
+        Taper ratio 10x. Three spirals allow more time per phase.
+        """
+        return cls(top_radius=5.0, bottom_radius=0.5, height=10.0, turns=3.0)
+
+    @classmethod
+    def fast_convergence(cls) -> HelixConfig:
+        """Narrow, single-spiral geometry for rapid synthesis.
+
+        top_radius=2.0, bottom_radius=0.5, height=5.0, turns=1.
+        Taper ratio 4x. One spiral, short height: fastest path to output.
+        """
+        return cls(top_radius=2.0, bottom_radius=0.5, height=5.0, turns=1.0)
+
+
+# ---------------------------------------------------------------------------
+# HelixPosition
+# ---------------------------------------------------------------------------
+
+
+class HelixPosition:
+    """Phase-aware position wrapper for a point on the helix.
+
+    Combines a HelixGeometry with a parameter value t in [0,1] and exposes
+    derived properties: 3D coordinates, the current phase name, and a
+    normalized temperature hint.
+
+    Phase boundaries (module constants):
+        [0.0, EXPLORATION_END)   -> "exploration"
+        [EXPLORATION_END, ANALYSIS_END) -> "analysis"
+        [ANALYSIS_END, 1.0]      -> "synthesis"
+    """
+
+    def __init__(self, geometry: HelixGeometry, t: float) -> None:
+        if not (0.0 <= t <= 1.0):
+            raise ValueError("t must be between 0 and 1")
+        self._geometry = geometry
+        self._t = t
+        self._coords: Tuple[float, float, float] | None = None
+
+    @property
+    def t(self) -> float:
+        """The parametric position (0 = top/exploration, 1 = bottom/synthesis)."""
+        return self._t
+
+    @property
+    def geometry(self) -> HelixGeometry:
+        """The underlying HelixGeometry this position belongs to."""
+        return self._geometry
+
+    @property
+    def coordinates(self) -> Tuple[float, float, float]:
+        """(x, y, z) position in 3D space. Cached after first access."""
+        if self._coords is None:
+            self._coords = self._geometry.get_position(self._t)
+        return self._coords
+
+    @property
+    def x(self) -> float:
+        return self.coordinates[0]
+
+    @property
+    def y(self) -> float:
+        return self.coordinates[1]
+
+    @property
+    def z(self) -> float:
+        return self.coordinates[2]
+
+    @property
+    def radius(self) -> float:
+        """Radial distance from helix axis at current height."""
+        return self._geometry.get_radius(self.z)
+
+    @property
+    def angle(self) -> float:
+        """Angular position in radians."""
+        return self._geometry.get_angle_at_t(self._t)
+
+    @property
+    def phase(self) -> str:
+        """Current workflow phase based on t value.
+
+        Returns one of: "exploration", "analysis", "synthesis".
+        """
+        if self._t < EXPLORATION_END:
+            return "exploration"
+        if self._t < ANALYSIS_END:
+            return "analysis"
+        return "synthesis"
+
+    @property
+    def is_exploration(self) -> bool:
+        return self.phase == "exploration"
+
+    @property
+    def is_analysis(self) -> bool:
+        return self.phase == "analysis"
+
+    @property
+    def is_synthesis(self) -> bool:
+        return self.phase == "synthesis"
+
+    @property
+    def temperature_hint(self) -> float:
+        """Normalized temperature suggestion in [0.0, 1.0].
+
+        1.0 at t=0 (maximum creativity), 0.0 at t=1 (minimum temperature).
+        Callers scale this into their desired temperature range.
+        """
+        return 1.0 - self._t
+
+    def __repr__(self) -> str:
+        return (
+            f"HelixPosition(t={self._t:.3f}, phase={self.phase!r}, "
+            f"coords=({self.x:.3f}, {self.y:.3f}, {self.z:.3f}))"
         )
