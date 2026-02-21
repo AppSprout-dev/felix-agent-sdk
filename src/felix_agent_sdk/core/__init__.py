@@ -1,9 +1,20 @@
 """Felix core geometry primitives.
 
-Defines the helical geometry model that drives agent behavior.
-Planned exports: HelixGeometry, HelixConfig, HelixPosition.
-
-Status: Stub — implementation in feat/core-geometry branch.
+Exports the helical geometry model that drives agent positioning and behavior.
 """
 
-__all__: list[str] = []
+from felix_agent_sdk.core.helix import (
+    ANALYSIS_END,
+    EXPLORATION_END,
+    HelixConfig,
+    HelixGeometry,
+    HelixPosition,
+)
+
+__all__ = [
+    "HelixGeometry",
+    "HelixConfig",
+    "HelixPosition",
+    "EXPLORATION_END",
+    "ANALYSIS_END",
+]
