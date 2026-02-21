@@ -138,6 +138,29 @@ class TestHelixGeometry:
         with pytest.raises(ValueError, match="Invalid t_start or t_end"):
             h.approximate_arc_length(t_start=0.8, t_end=0.2)
 
+    def test_approximate_arc_length_custom_segments(self) -> None:
+        h = HelixGeometry(top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2)
+        arc_coarse = h.approximate_arc_length(segments=10)
+        arc_fine = h.approximate_arc_length(segments=1000)
+        assert arc_coarse > 0.0
+        # Finer approximation >= coarser (linear interpolation underestimates curves)
+        assert arc_fine >= arc_coarse
+
+    def test_approximate_arc_length_invalid_segments(self) -> None:
+        h = HelixGeometry(top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2)
+        with pytest.raises(ValueError, match="segments must be positive"):
+            h.approximate_arc_length(segments=0)
+
+    def test_get_angle_at_t_invalid_below(self) -> None:
+        h = HelixGeometry(top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2)
+        with pytest.raises(ValueError, match="t must be between 0 and 1"):
+            h.get_angle_at_t(-0.1)
+
+    def test_get_angle_at_t_invalid_above(self) -> None:
+        h = HelixGeometry(top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2)
+        with pytest.raises(ValueError, match="t must be between 0 and 1"):
+            h.get_angle_at_t(1.1)
+
     def test_repr(self) -> None:
         h = HelixGeometry(top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2)
         r = repr(h)
@@ -159,21 +182,21 @@ class TestHelixConfig:
         assert c.top_radius == 3.0
         assert c.bottom_radius == 0.5
         assert c.height == 8.0
-        assert c.turns == 2.0
+        assert c.turns == 2
 
     def test_research_heavy_preset_values(self) -> None:
         c = HelixConfig.research_heavy()
         assert c.top_radius == 5.0
         assert c.bottom_radius == 0.5
         assert c.height == 10.0
-        assert c.turns == 3.0
+        assert c.turns == 3
 
     def test_fast_convergence_preset_values(self) -> None:
         c = HelixConfig.fast_convergence()
         assert c.top_radius == 2.0
         assert c.bottom_radius == 0.5
         assert c.height == 5.0
-        assert c.turns == 1.0
+        assert c.turns == 1
 
     def test_to_geometry_returns_helix_geometry(self) -> None:
         c = HelixConfig.default()
@@ -196,6 +219,22 @@ class TestHelixConfig:
         c = HelixConfig.default()
         with pytest.raises(FrozenInstanceError):
             c.top_radius = 99.0  # type: ignore[misc]
+
+    def test_construction_invalid_top_not_greater_than_bottom(self) -> None:
+        with pytest.raises(ValueError, match="top_radius must be greater"):
+            HelixConfig(top_radius=0.5, bottom_radius=0.5, height=8.0, turns=2)
+
+    def test_construction_invalid_height_zero(self) -> None:
+        with pytest.raises(ValueError, match="height must be positive"):
+            HelixConfig(top_radius=3.0, bottom_radius=0.5, height=0, turns=2)
+
+    def test_construction_invalid_turns_zero(self) -> None:
+        with pytest.raises(ValueError, match="turns must be positive"):
+            HelixConfig(top_radius=3.0, bottom_radius=0.5, height=8.0, turns=0)
+
+    def test_construction_invalid_top_radius_negative(self) -> None:
+        with pytest.raises(ValueError, match="top_radius must be greater"):
+            HelixConfig(top_radius=-1.0, bottom_radius=999.0, height=8.0, turns=2)
 
     def test_repr(self) -> None:
         c = HelixConfig.default()
