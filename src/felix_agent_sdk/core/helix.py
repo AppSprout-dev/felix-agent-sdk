@@ -223,7 +223,16 @@ class HelixConfig:
     top_radius: float
     bottom_radius: float
     height: float
-    turns: float
+    turns: int
+
+    def __post_init__(self) -> None:
+        """Validate config parameters at construction time."""
+        if self.top_radius <= self.bottom_radius:
+            raise ValueError("top_radius must be greater than bottom_radius for tapering")
+        if self.height <= 0:
+            raise ValueError("height must be positive")
+        if self.turns <= 0:
+            raise ValueError("turns must be positive")
 
     def to_geometry(self) -> HelixGeometry:
         """Construct a HelixGeometry instance from this config."""
@@ -231,7 +240,7 @@ class HelixConfig:
             top_radius=self.top_radius,
             bottom_radius=self.bottom_radius,
             height=self.height,
-            turns=int(self.turns),
+            turns=self.turns,
         )
 
     @classmethod
@@ -241,7 +250,7 @@ class HelixConfig:
         top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2.
         Taper ratio 6x. Two full spirals from exploration to synthesis.
         """
-        return cls(top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2.0)
+        return cls(top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2)
 
     @classmethod
     def research_heavy(cls) -> HelixConfig:
@@ -250,7 +259,7 @@ class HelixConfig:
         top_radius=5.0, bottom_radius=0.5, height=10.0, turns=3.
         Taper ratio 10x. Three spirals allow more time per phase.
         """
-        return cls(top_radius=5.0, bottom_radius=0.5, height=10.0, turns=3.0)
+        return cls(top_radius=5.0, bottom_radius=0.5, height=10.0, turns=3)
 
     @classmethod
     def fast_convergence(cls) -> HelixConfig:
@@ -259,7 +268,7 @@ class HelixConfig:
         top_radius=2.0, bottom_radius=0.5, height=5.0, turns=1.
         Taper ratio 4x. One spiral, short height: fastest path to output.
         """
-        return cls(top_radius=2.0, bottom_radius=0.5, height=5.0, turns=1.0)
+        return cls(top_radius=2.0, bottom_radius=0.5, height=5.0, turns=1)
 
 
 # ---------------------------------------------------------------------------
