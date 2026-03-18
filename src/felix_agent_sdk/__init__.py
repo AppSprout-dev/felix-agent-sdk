@@ -30,6 +30,7 @@ from felix_agent_sdk.providers import (
     OpenAIProvider,
     auto_detect_provider,
 )
+from felix_agent_sdk.communication import CentralPost, Message, MessageType, Spoke
 from felix_agent_sdk.tokens import TokenBudget
 
 __all__ = [
@@ -50,6 +51,11 @@ __all__ = [
     "AnalysisAgent",
     "CriticAgent",
     "AgentFactory",
+    # Communication
+    "CentralPost",
+    "Message",
+    "MessageType",
+    "Spoke",
     # Tokens
     "TokenBudget",
 ]
