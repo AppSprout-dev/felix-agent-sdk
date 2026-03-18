@@ -12,20 +12,44 @@ Full documentation: https://github.com/AppSprout-dev/felix-agent-sdk
 """
 
 from felix_agent_sdk._version import __version__
+from felix_agent_sdk.agents import (
+    Agent,
+    AgentFactory,
+    AgentState,
+    AnalysisAgent,
+    CriticAgent,
+    LLMAgent,
+    LLMResult,
+    LLMTask,
+    ResearchAgent,
+)
 from felix_agent_sdk.providers import (
-    BaseProvider,
     AnthropicProvider,
-    OpenAIProvider,
+    BaseProvider,
     LocalProvider,
+    OpenAIProvider,
     auto_detect_provider,
 )
+from felix_agent_sdk.tokens import TokenBudget
 
 __all__ = [
     "__version__",
-    # Providers (available in Phase 1)
+    # Providers
     "BaseProvider",
     "AnthropicProvider",
     "OpenAIProvider",
     "LocalProvider",
     "auto_detect_provider",
+    # Agents
+    "Agent",
+    "AgentState",
+    "LLMAgent",
+    "LLMTask",
+    "LLMResult",
+    "ResearchAgent",
+    "AnalysisAgent",
+    "CriticAgent",
+    "AgentFactory",
+    # Tokens
+    "TokenBudget",
 ]

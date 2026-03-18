@@ -6,6 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from felix_agent_sdk.agents.llm_agent import LLMTask
+from felix_agent_sdk.core.helix import HelixConfig, HelixGeometry
+from felix_agent_sdk.providers.base import BaseProvider
 from felix_agent_sdk.providers.types import (
     ChatMessage,
     CompletionResult,
@@ -126,3 +129,47 @@ def mock_openai_response():
         return response
 
     return _make
+
+
+# ---------------------------------------------------------------------------
+# Helix / Agent fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def default_helix():
+    """Default HelixGeometry (top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2)."""
+    return HelixGeometry(top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2)
+
+
+@pytest.fixture
+def default_helix_config():
+    return HelixConfig.default()
+
+
+@pytest.fixture
+def mock_provider():
+    """A BaseProvider mock that returns predictable CompletionResults."""
+    provider = MagicMock(spec=BaseProvider)
+    provider.complete.return_value = CompletionResult(
+        content=(
+            "The analysis reveals several key findings. First, the data indicates "
+            "a strong correlation between renewable energy adoption and grid stability. "
+            "Furthermore, evidence from multiple studies demonstrates that distributed "
+            "generation improves resilience. However, intermittency challenges remain "
+            "a specific concern requiring detailed attention."
+        ),
+        model="test-model",
+        usage={"prompt_tokens": 100, "completion_tokens": 60, "total_tokens": 160},
+    )
+    provider.count_tokens.return_value = 100
+    return provider
+
+
+@pytest.fixture
+def sample_task():
+    """A sample LLMTask for agent tests."""
+    return LLMTask(
+        task_id="task-001",
+        description="Analyse the impact of renewable energy on grid stability.",
+    )
