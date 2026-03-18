@@ -7,6 +7,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from felix_agent_sdk.agents.llm_agent import LLMTask
+from felix_agent_sdk.communication.central_post import CentralPost
+from felix_agent_sdk.communication.messages import Message, MessageType
+from felix_agent_sdk.communication.spoke import SpokeManager
 from felix_agent_sdk.core.helix import HelixConfig, HelixGeometry
 from felix_agent_sdk.providers.base import BaseProvider
 from felix_agent_sdk.providers.types import (
@@ -173,3 +176,34 @@ def sample_task():
         task_id="task-001",
         description="Analyse the impact of renewable energy on grid stability.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Communication fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def central_post():
+    """A fresh CentralPost instance with a small agent limit for tests."""
+    hub = CentralPost(max_agents=10)
+    yield hub
+    hub.shutdown()
+
+
+@pytest.fixture
+def sample_message():
+    """A sample STATUS_UPDATE message for communication tests."""
+    return Message(
+        sender_id="agent-test",
+        message_type=MessageType.STATUS_UPDATE,
+        content={"status": "working", "confidence": 0.75},
+    )
+
+
+@pytest.fixture
+def spoke_manager(central_post):
+    """A SpokeManager connected to the test CentralPost."""
+    manager = SpokeManager(hub=central_post)
+    yield manager
+    manager.shutdown_all()
