@@ -430,13 +430,20 @@ class CentralPost:
         logger.debug("SYNTHESIS_FEEDBACK from %s", message.sender_id)
 
     def _handle_contribution_evaluation(self, message: Message) -> None:
-        """Evaluation of an agent's contribution quality."""
+        """Evaluation of an agent's contribution quality.
+
+        The evaluated agent is identified by ``content["agent_id"]`` or
+        ``receiver_id``, falling back to ``sender_id`` if neither is set.
+        """
+        evaluated_agent = (
+            message.content.get("agent_id") or message.receiver_id or message.sender_id
+        )
         score = message.content.get("score")
         if score is not None:
             self.agent_registry.update_agent_performance(
-                message.sender_id, {"confidence": float(score)}
+                evaluated_agent, {"confidence": float(score)}
             )
-        logger.debug("CONTRIBUTION_EVALUATION for %s", message.sender_id)
+        logger.debug("CONTRIBUTION_EVALUATION for %s (score=%s)", evaluated_agent, score)
 
     def _handle_improvement_request(self, message: Message) -> None:
         """A request for improvement on previous output."""
