@@ -244,15 +244,24 @@ class KnowledgeStore:
         self._backend.store(_TABLE, knowledge_id, entry.to_dict())
         return knowledge_id
 
-    def get_entry_by_id(self, knowledge_id: str) -> Optional[KnowledgeEntry]:
-        """Retrieve a single entry by ID."""
+    def get_entry_by_id(
+        self, knowledge_id: str, *, track_access: bool = False
+    ) -> Optional[KnowledgeEntry]:
+        """Retrieve a single entry by ID.
+
+        Args:
+            knowledge_id: Entry ID to look up.
+            track_access: If ``True``, increment the entry's access
+                counter (costs an extra read-modify-write cycle).
+        """
         data = self._backend.get(_TABLE, knowledge_id)
         if data is None:
             return None
         entry = KnowledgeEntry.from_dict(data)
         if entry.is_deleted:
             return None
-        self._increment_access_count(knowledge_id)
+        if track_access:
+            self._increment_access_count(knowledge_id)
         return entry
 
     def update_entry(self, knowledge_id: str, updates: dict[str, Any]) -> bool:
