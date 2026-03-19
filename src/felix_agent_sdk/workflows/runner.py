@@ -17,7 +17,7 @@ from felix_agent_sdk.agents.base import AgentState
 from felix_agent_sdk.agents.factory import AgentFactory
 from felix_agent_sdk.agents.llm_agent import LLMAgent, LLMResult, LLMTask
 from felix_agent_sdk.communication.central_post import CentralPost
-from felix_agent_sdk.communication.messages import Message, MessageType
+from felix_agent_sdk.communication.messages import MessageType
 from felix_agent_sdk.communication.spoke import SpokeManager
 from felix_agent_sdk.providers.base import BaseProvider
 from felix_agent_sdk.workflows.config import WorkflowConfig, WorkflowResult
@@ -205,16 +205,13 @@ class FelixWorkflow:
             # Send status message through hub
             spoke = spoke_mgr.get_spoke(agent.agent_id)
             if spoke:
-                spoke.send(
-                    Message(
-                        sender_id=agent.agent_id,
-                        message_type=MessageType.STATUS_UPDATE,
-                        content={
-                            "confidence": result.confidence,
-                            "phase": result.position_info.get("phase", ""),
-                            "progress": result.position_info.get("progress", 0.0),
-                        },
-                    )
+                spoke.send_message(
+                    message_type=MessageType.STATUS_UPDATE,
+                    content={
+                        "confidence": result.confidence,
+                        "phase": result.position_info.get("phase", ""),
+                        "progress": result.position_info.get("progress", 0.0),
+                    },
                 )
 
             round_results.append(result)
