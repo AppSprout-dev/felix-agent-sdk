@@ -7,7 +7,7 @@ All notable changes to Felix Agent SDK will be documented in this file.
 Initial public release of the Felix Agent SDK.
 
 ### Core Geometry
-- `HelixGeometry` — 3D parametric helix with `get_position(t)`, `get_radius(t)`, `get_height(t)`
+- `HelixGeometry` — 3D parametric helix with `get_position(t)`, `get_radius(z)`, `get_angle_at_t(t)`, `get_tangent_vector(t)`, `approximate_arc_length()`
 - `HelixConfig` — named presets: `default()`, `research_heavy()`, `fast_convergence()`
 - `HelixPosition` — phase-aware wrapper with exploration/analysis/synthesis boundaries
 
