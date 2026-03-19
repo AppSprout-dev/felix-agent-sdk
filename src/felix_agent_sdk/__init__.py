@@ -33,6 +33,7 @@ from felix_agent_sdk.providers import (
 from felix_agent_sdk.communication import CentralPost, Message, MessageType, Spoke
 from felix_agent_sdk.memory import ContextCompressor, KnowledgeStore, TaskMemory
 from felix_agent_sdk.tokens import TokenBudget
+from felix_agent_sdk.workflows import FelixWorkflow, WorkflowConfig, run_felix_workflow
 
 __all__ = [
     "__version__",
@@ -61,6 +62,10 @@ __all__ = [
     "KnowledgeStore",
     "TaskMemory",
     "ContextCompressor",
+    # Workflows
+    "FelixWorkflow",
+    "run_felix_workflow",
+    "WorkflowConfig",
     # Tokens
     "TokenBudget",
 ]

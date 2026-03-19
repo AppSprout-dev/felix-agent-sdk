@@ -1,8 +1,17 @@
-"""Pre-built workflow templates.
+"""Pre-built workflow templates for common patterns."""
 
-Planned exports: research, analysis, review templates.
+from felix_agent_sdk.workflows.templates.analysis import (
+    create_config as analysis_config,
+)
+from felix_agent_sdk.workflows.templates.research import (
+    create_config as research_config,
+)
+from felix_agent_sdk.workflows.templates.review import (
+    create_config as review_config,
+)
 
-Status: Stub — implementation in feat/workflows branch.
-"""
-
-__all__: list[str] = []
+__all__ = [
+    "research_config",
+    "analysis_config",
+    "review_config",
+]
