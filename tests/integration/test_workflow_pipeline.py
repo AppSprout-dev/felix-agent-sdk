@@ -26,13 +26,9 @@ from felix_agent_sdk.workflows.templates import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-_CALL_COUNTER = 0
-
-
 def _make_multi_response_provider() -> BaseProvider:
     """Mock provider that returns distinct responses per call."""
-    global _CALL_COUNTER  # noqa: PLW0603
-    _CALL_COUNTER = 0
+    call_count = [0]
 
     provider = MagicMock(spec=BaseProvider)
 
@@ -48,9 +44,8 @@ def _make_multi_response_provider() -> BaseProvider:
     ]
 
     def _complete(messages, **kwargs):
-        global _CALL_COUNTER  # noqa: PLW0603
-        idx = _CALL_COUNTER % len(responses)
-        _CALL_COUNTER += 1
+        idx = call_count[0] % len(responses)
+        call_count[0] += 1
         return CompletionResult(
             content=responses[idx],
             model="test-model",
