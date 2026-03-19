@@ -142,7 +142,10 @@ class TaskPattern:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskPattern:
         d = dict(data)
-        d.pop("_id", None)
+        if "_id" in d:
+            d.setdefault("pattern_id", d.pop("_id"))
+        else:
+            d.pop("_id", None)
         d["complexity"] = TaskComplexity(d["complexity"])
         for list_field in ("keywords", "failure_modes", "optimal_strategies", "required_agents"):
             if isinstance(d.get(list_field), str):
@@ -184,7 +187,10 @@ class TaskExecution:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskExecution:
         d = dict(data)
-        d.pop("_id", None)
+        if "_id" in d:
+            d.setdefault("execution_id", d.pop("_id"))
+        else:
+            d.pop("_id", None)
         d["complexity"] = TaskComplexity(d["complexity"])
         d["outcome"] = TaskOutcome(d["outcome"])
         for list_field in ("agents_used", "strategies_used", "error_messages", "patterns_matched"):

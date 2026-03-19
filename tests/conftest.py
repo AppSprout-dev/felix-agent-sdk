@@ -207,3 +207,53 @@ def spoke_manager(central_post):
     manager = SpokeManager(hub=central_post)
     yield manager
     manager.shutdown_all()
+
+
+# ---------------------------------------------------------------------------
+# Memory fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sqlite_backend(tmp_path):
+    """A fresh SQLiteBackend using a temp directory."""
+    from felix_agent_sdk.memory.backends.sqlite import SQLiteBackend
+
+    db_path = str(tmp_path / "test_memory.db")
+    backend = SQLiteBackend(db_path=db_path)
+    yield backend
+    backend.close()
+
+
+@pytest.fixture
+def memory_backend():
+    """An in-memory SQLiteBackend for fast tests."""
+    from felix_agent_sdk.memory.backends.sqlite import SQLiteBackend
+
+    backend = SQLiteBackend()
+    yield backend
+    backend.close()
+
+
+@pytest.fixture
+def knowledge_store(memory_backend):
+    """A KnowledgeStore with in-memory backend."""
+    from felix_agent_sdk.memory.knowledge_store import KnowledgeStore
+
+    return KnowledgeStore(backend=memory_backend)
+
+
+@pytest.fixture
+def task_memory(memory_backend):
+    """A TaskMemory with in-memory backend."""
+    from felix_agent_sdk.memory.task_memory import TaskMemory
+
+    return TaskMemory(backend=memory_backend)
+
+
+@pytest.fixture
+def compressor():
+    """A default ContextCompressor."""
+    from felix_agent_sdk.memory.compression import ContextCompressor
+
+    return ContextCompressor()

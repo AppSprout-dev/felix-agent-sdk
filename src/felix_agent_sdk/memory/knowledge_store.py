@@ -96,8 +96,11 @@ class KnowledgeEntry:
     def from_dict(cls, data: dict[str, Any]) -> KnowledgeEntry:
         """Reconstruct from a backend dict."""
         d = dict(data)
-        # Pop backend internal key
-        d.pop("_id", None)
+        # Map backend _id to knowledge_id
+        if "_id" in d:
+            d.setdefault("knowledge_id", d.pop("_id"))
+        else:
+            d.pop("_id", None)
         d["knowledge_type"] = KnowledgeType(d["knowledge_type"])
         d["confidence_level"] = ConfidenceLevel(d["confidence_level"])
         if isinstance(d.get("content"), str):
