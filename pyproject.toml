@@ -38,13 +38,9 @@ dependencies = [
 anthropic = ["anthropic>=0.30"]
 openai = ["openai>=1.0"]
 local = ["openai>=1.0"]
-bedrock = ["boto3>=1.28"]
-vertex = ["google-cloud-aiplatform>=1.36"]
 all = [
     "anthropic>=0.30",
     "openai>=1.0",
-    "boto3>=1.28",
-    "google-cloud-aiplatform>=1.36",
 ]
 dev = [
     "pytest>=7.0",

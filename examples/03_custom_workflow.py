@@ -9,18 +9,14 @@ Usage:
     python examples/03_custom_workflow.py
 """
 
-from unittest.mock import MagicMock
+from _mock import make_mock_provider
 
 from felix_agent_sdk import FelixWorkflow, WorkflowConfig
 from felix_agent_sdk.core.helix import HelixConfig
-from felix_agent_sdk.providers.base import BaseProvider
-from felix_agent_sdk.providers.types import CompletionResult
 from felix_agent_sdk.workflows.config import SynthesisStrategy
 
 
-def make_mock_provider() -> BaseProvider:
-    provider = MagicMock(spec=BaseProvider)
-    call_count = [0]
+def main():
     responses = [
         "Initial research reveals three competing approaches to the problem, "
         "each with distinct trade-offs in scalability and maintainability.",
@@ -33,23 +29,7 @@ def make_mock_provider() -> BaseProvider:
         "Final synthesis: approach B is recommended with a phased rollout "
         "strategy and connection pool monitoring as a key operational metric.",
     ]
-
-    def _complete(messages, **kwargs):
-        idx = call_count[0] % len(responses)
-        call_count[0] += 1
-        return CompletionResult(
-            content=responses[idx],
-            model="mock",
-            usage={"prompt_tokens": 60, "completion_tokens": 50, "total_tokens": 110},
-        )
-
-    provider.complete.side_effect = _complete
-    provider.count_tokens.return_value = 60
-    return provider
-
-
-def main():
-    provider = make_mock_provider()
+    provider = make_mock_provider(responses)
 
     # Custom configuration: wide helix, extra research, higher threshold
     config = WorkflowConfig(
@@ -81,8 +61,10 @@ def main():
         synthesis_strategy=SynthesisStrategy.BEST_RESULT,
         max_rounds=2,
     )
-    result_best = FelixWorkflow(config_best, make_mock_provider()).run("Same task, different strategy")
-    print(f"\n--- BEST_RESULT strategy ---")
+    result_best = FelixWorkflow(config_best, make_mock_provider(responses)).run(
+        "Same task, different strategy"
+    )
+    print("\n--- BEST_RESULT strategy ---")
     print(f"Synthesis: {result_best.synthesis[:100]}...")
 
 
