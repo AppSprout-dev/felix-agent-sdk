@@ -31,6 +31,7 @@ from felix_agent_sdk.providers import (
     auto_detect_provider,
 )
 from felix_agent_sdk.communication import CentralPost, Message, MessageType, Spoke
+from felix_agent_sdk.memory import ContextCompressor, KnowledgeStore, TaskMemory
 from felix_agent_sdk.tokens import TokenBudget
 
 __all__ = [
@@ -56,6 +57,10 @@ __all__ = [
     "Message",
     "MessageType",
     "Spoke",
+    # Memory
+    "KnowledgeStore",
+    "TaskMemory",
+    "ContextCompressor",
     # Tokens
     "TokenBudget",
 ]

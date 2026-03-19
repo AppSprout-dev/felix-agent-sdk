@@ -1,8 +1,9 @@
-"""Pluggable storage backends for Felix memory systems.
+"""Pluggable storage backends for Felix memory systems."""
 
-Planned exports: BaseBackend, SQLiteBackend.
+from felix_agent_sdk.memory.backends.base import BaseBackend
+from felix_agent_sdk.memory.backends.sqlite import SQLiteBackend
 
-Status: Stub — implementation in feat/memory branch.
-"""
-
-__all__: list[str] = []
+__all__ = [
+    "BaseBackend",
+    "SQLiteBackend",
+]
