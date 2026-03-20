@@ -200,9 +200,9 @@ class HelixVisualizer:
         analysis_row = int(ANALYSIS_END * (HELIX_HEIGHT - 1))
 
         for col in range(HELIX_WIDTH):
-            if canvas[explore_row][col].strip() == "" or canvas[explore_row][col] == " ":
+            if canvas[explore_row][col].strip() == "":
                 canvas[explore_row][col] = _c(_DIM + _CYAN, "-")
-            if canvas[analysis_row][col].strip() == "" or canvas[analysis_row][col] == " ":
+            if canvas[analysis_row][col].strip() == "":
                 canvas[analysis_row][col] = _c(_DIM + _YELLOW, "-")
 
     def _place_agent(self, canvas: list[list[str]], agent: AgentSnapshot) -> None:

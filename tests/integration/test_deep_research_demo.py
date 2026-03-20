@@ -6,30 +6,20 @@ produces agent results, and generates a synthesis.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 
-# Add the example directory so sibling imports (_mock_research, helix_visualizer) resolve.
-_example_dir = str(
-    Path(__file__).resolve().parent.parent.parent / "examples" / "05_deep_research_live"
-)
-if _example_dir not in sys.path:
-    sys.path.insert(0, _example_dir)
+from _mock_research import make_research_mock_provider
+from helix_visualizer import AgentSnapshot, HelixVisualizer
 
-from _mock_research import make_research_mock_provider  # noqa: E402
-from helix_visualizer import AgentSnapshot, HelixVisualizer  # noqa: E402
-
-from felix_agent_sdk.agents.base import AgentState  # noqa: E402
-from felix_agent_sdk.agents.factory import AgentFactory  # noqa: E402
-from felix_agent_sdk.agents.llm_agent import LLMAgent, LLMResult, LLMTask  # noqa: E402
-from felix_agent_sdk.communication.central_post import CentralPost  # noqa: E402
-from felix_agent_sdk.communication.spoke import SpokeManager  # noqa: E402
-from felix_agent_sdk.core.helix import HelixConfig  # noqa: E402
-from felix_agent_sdk.workflows.config import SynthesisStrategy, WorkflowConfig  # noqa: E402
-from felix_agent_sdk.workflows.context_builder import CollaborativeContextBuilder  # noqa: E402
-from felix_agent_sdk.workflows.synthesizer import WorkflowSynthesizer  # noqa: E402
+from felix_agent_sdk.agents.base import AgentState
+from felix_agent_sdk.agents.factory import AgentFactory
+from felix_agent_sdk.agents.llm_agent import LLMAgent, LLMResult, LLMTask
+from felix_agent_sdk.communication.central_post import CentralPost
+from felix_agent_sdk.communication.spoke import SpokeManager
+from felix_agent_sdk.core.helix import HelixConfig
+from felix_agent_sdk.workflows.config import SynthesisStrategy, WorkflowConfig
+from felix_agent_sdk.workflows.context_builder import CollaborativeContextBuilder
+from felix_agent_sdk.workflows.synthesizer import WorkflowSynthesizer
 
 
 # ---------------------------------------------------------------------------
