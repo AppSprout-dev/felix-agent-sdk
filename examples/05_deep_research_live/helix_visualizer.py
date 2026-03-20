@@ -14,8 +14,6 @@ import os
 import sys
 import time
 from dataclasses import dataclass
-from typing import Optional
-
 from felix_agent_sdk.core.helix import ANALYSIS_END, EXPLORATION_END, HelixGeometry
 
 # ---------------------------------------------------------------------------
@@ -31,6 +29,8 @@ _MAGENTA = "\033[95m"
 _DIM = "\033[2m"
 _BOLD = "\033[1m"
 _RESET = "\033[0m"
+
+_CLEAR_SCREEN = "\033[2J\033[H"
 
 _PHASE_COLOUR = {
     "exploration": _CYAN,
@@ -90,9 +90,9 @@ class AgentSnapshot:
 # ---------------------------------------------------------------------------
 
 # Canvas dimensions
-HELIX_WIDTH = 50       # horizontal chars for the helix cross-section
-HELIX_HEIGHT = 28       # vertical chars (top = t=0, bottom = t=1)
-SIDEBAR_WIDTH = 38      # agent detail panel width
+HELIX_WIDTH = 50  # horizontal chars for the helix cross-section
+HELIX_HEIGHT = 28  # vertical chars (top = t=0, bottom = t=1)
+SIDEBAR_WIDTH = 38  # agent detail panel width
 
 
 class HelixVisualizer:
@@ -129,7 +129,7 @@ class HelixVisualizer:
             self._place_agent(canvas, agent)
 
         # Compose sidebar
-        sidebar = self._build_sidebar(agents, round_num, max_rounds)
+        sidebar = self._build_sidebar(agents)
 
         # Merge canvas + sidebar
         lines = self._merge(canvas, sidebar)
@@ -151,7 +151,7 @@ class HelixVisualizer:
         """Clear terminal and print the current frame."""
         frame = self.render_frame(agents, round_num, max_rounds, status_line)
         # Move cursor to top-left and clear screen
-        sys.stdout.write("\033[2J\033[H")
+        sys.stdout.write(_CLEAR_SCREEN)
         sys.stdout.write(frame)
         sys.stdout.flush()
 
@@ -245,8 +245,6 @@ class HelixVisualizer:
     def _build_sidebar(
         self,
         agents: list[AgentSnapshot],
-        round_num: int,
-        max_rounds: int,
     ) -> list[str]:
         """Build the right-hand agent detail panel."""
         lines: list[str] = []
@@ -276,7 +274,7 @@ class HelixVisualizer:
 
             # Content preview (truncated)
             if agent.content_preview:
-                preview = agent.content_preview[:SIDEBAR_WIDTH - 6]
+                preview = agent.content_preview[: SIDEBAR_WIDTH - 6]
                 if len(agent.content_preview) > SIDEBAR_WIDTH - 6:
                     preview = preview[: SIDEBAR_WIDTH - 9] + "..."
                 lines.append(f"   {_c(_DIM, preview)}")
@@ -302,9 +300,7 @@ class HelixVisualizer:
             lines.append(f"  {canvas_line} │{side}")
         return lines
 
-    def _build_header(
-        self, round_num: int, max_rounds: int, elapsed: float
-    ) -> str:
+    def _build_header(self, round_num: int, max_rounds: int, elapsed: float) -> str:
         header_text = (
             f"  {_c(_BOLD, 'F E L I X')}  "
             f"Deep Research Demo  │  "
@@ -319,18 +315,19 @@ class HelixVisualizer:
         )
         return f"\n{header_text}\n{separator}\n{phase_legend}\n"
 
-    def _build_footer(
-        self, agents: list[AgentSnapshot], status_line: str
-    ) -> str:
+    def _build_footer(self, agents: list[AgentSnapshot], status_line: str) -> str:
         separator = "  " + "═" * (HELIX_WIDTH + SIDEBAR_WIDTH + 3)
-        avg_conf = (
-            sum(a.confidence for a in agents) / len(agents) if agents else 0
-        )
+        avg_conf = sum(a.confidence for a in agents) / len(agents) if agents else 0
         avg_bar_w = 30
         filled = int(avg_conf * avg_bar_w)
         avg_bar = "█" * filled + "░" * (avg_bar_w - filled)
 
-        conf_colour = _GREEN if avg_conf >= 0.75 else _YELLOW if avg_conf >= 0.5 else _RED
+        if avg_conf >= 0.75:
+            conf_colour = _GREEN
+        elif avg_conf >= 0.5:
+            conf_colour = _YELLOW
+        else:
+            conf_colour = _RED
         conf_line = (
             f"  Team Confidence: {_c(conf_colour, avg_bar)} "
             f"{_c(_BOLD + conf_colour, f'{avg_conf:.1%}')}"
@@ -361,7 +358,7 @@ def print_intro() -> None:
        ║                                                       ║
        ╚═══════════════════════════════════════════════════════╝
     """
-    sys.stdout.write("\033[2J\033[H")
+    sys.stdout.write(_CLEAR_SCREEN)
     for line in banner.strip().split("\n"):
         sys.stdout.write(_c(_CYAN, line) + "\n")
         sys.stdout.flush()
@@ -382,19 +379,19 @@ def print_phase_transition(phase_name: str) -> None:
 
 def print_synthesis_result(synthesis: str, confidence: float) -> None:
     """Print the final synthesis with styling."""
-    sys.stdout.write("\033[2J\033[H")
+    sys.stdout.write(_CLEAR_SCREEN)
     separator = "═" * 70
     conf_colour = _GREEN if confidence >= 0.75 else _YELLOW
 
     header = f"""
   {_c(_BOLD + _GREEN, separator)}
-  {_c(_BOLD + _GREEN, '  F E L I X  —  SYNTHESIS COMPLETE')}
+  {_c(_BOLD + _GREEN, "  F E L I X  —  SYNTHESIS COMPLETE")}
   {_c(_BOLD + _GREEN, separator)}
 
-  {_c(_BOLD, 'Final Confidence:')} {_c(conf_colour, f'{confidence:.1%}')}
+  {_c(_BOLD, "Final Confidence:")} {_c(conf_colour, f"{confidence:.1%}")}
 
-  {_c(_BOLD, 'Synthesised Research Report:')}
-  {_c(_DIM, '─' * 60)}
+  {_c(_BOLD, "Synthesised Research Report:")}
+  {_c(_DIM, "─" * 60)}
 """
     sys.stdout.write(header)
 
@@ -413,9 +410,9 @@ def print_synthesis_result(synthesis: str, confidence: float) -> None:
 
     footer = f"""
 
-  {_c(_DIM, '─' * 60)}
-  {_c(_DIM, 'Powered by Felix Agent SDK — helical multi-agent orchestration')}
-  {_c(_DIM, 'github.com/AppSprout-dev/felix-agent-sdk')}
+  {_c(_DIM, "─" * 60)}
+  {_c(_DIM, "Powered by Felix Agent SDK — helical multi-agent orchestration")}
+  {_c(_DIM, "github.com/AppSprout-dev/felix-agent-sdk")}
   {_c(_BOLD + _GREEN, separator)}
 """
     sys.stdout.write(footer)

@@ -17,39 +17,35 @@ from __future__ import annotations
 
 import argparse
 import io
-import os
 import sys
 import time
-
-# Enable UTF-8 output on Windows terminals
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(
-        sys.stdout.buffer, encoding="utf-8", errors="replace"
-    )
-    # Enable ANSI escape processing on Windows 10+
-    os.system("")
-
-# Ensure the examples directory and src are importable
+from dataclasses import dataclass
 from pathlib import Path
 
-_root = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(_root / "src"))
-sys.path.insert(0, str(_root / "examples"))
+# Enable UTF-8 output on Windows so box-drawing chars render correctly
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-from felix_agent_sdk.agents.base import AgentState
-from felix_agent_sdk.agents.factory import AgentFactory
-from felix_agent_sdk.agents.llm_agent import LLMAgent, LLMResult, LLMTask
-from felix_agent_sdk.communication.central_post import CentralPost
-from felix_agent_sdk.communication.messages import MessageType
-from felix_agent_sdk.communication.spoke import SpokeManager
-from felix_agent_sdk.core.helix import HelixConfig
-from felix_agent_sdk.providers.base import BaseProvider
-from felix_agent_sdk.workflows.config import SynthesisStrategy, WorkflowConfig
-from felix_agent_sdk.workflows.context_builder import CollaborativeContextBuilder
-from felix_agent_sdk.workflows.synthesizer import WorkflowSynthesizer
+# Allow running as: python examples/05_deep_research_live/run.py
+# by adding the example directory to sys.path for sibling imports.
+_example_dir = str(Path(__file__).resolve().parent)
+if _example_dir not in sys.path:  # noqa: E402
+    sys.path.insert(0, _example_dir)
 
-from _mock_research import make_research_mock_provider
-from helix_visualizer import (
+from felix_agent_sdk.agents.base import AgentState  # noqa: E402
+from felix_agent_sdk.agents.factory import AgentFactory  # noqa: E402
+from felix_agent_sdk.agents.llm_agent import LLMAgent, LLMResult, LLMTask  # noqa: E402
+from felix_agent_sdk.communication.central_post import CentralPost  # noqa: E402
+from felix_agent_sdk.communication.messages import MessageType  # noqa: E402
+from felix_agent_sdk.communication.spoke import SpokeManager  # noqa: E402
+from felix_agent_sdk.core.helix import HelixConfig  # noqa: E402
+from felix_agent_sdk.providers.base import BaseProvider  # noqa: E402
+from felix_agent_sdk.workflows.config import SynthesisStrategy, WorkflowConfig  # noqa: E402
+from felix_agent_sdk.workflows.context_builder import CollaborativeContextBuilder  # noqa: E402
+from felix_agent_sdk.workflows.synthesizer import WorkflowSynthesizer  # noqa: E402
+
+from _mock_research import make_research_mock_provider  # noqa: E402
+from helix_visualizer import (  # noqa: E402
     AgentSnapshot,
     HelixVisualizer,
     print_intro,
@@ -95,9 +91,7 @@ def build_config() -> WorkflowConfig:
 # ---------------------------------------------------------------------------
 
 
-def agent_to_snapshot(
-    agent: LLMAgent, last_content: str = ""
-) -> AgentSnapshot:
+def agent_to_snapshot(agent: LLMAgent, last_content: str = "") -> AgentSnapshot:
     """Convert a live agent to a renderable snapshot."""
     return AgentSnapshot(
         agent_id=agent.agent_id,
@@ -108,6 +102,93 @@ def agent_to_snapshot(
         phase=agent.position.phase,
         content_preview=last_content[:80] if last_content else "",
     )
+
+
+# ---------------------------------------------------------------------------
+# Per-agent processing step (extracted to reduce cognitive complexity)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _RoundContext:
+    """Mutable state passed through a single processing round."""
+
+    agents: list[LLMAgent]
+    spoke_mgr: SpokeManager
+    builder: CollaborativeContextBuilder
+    viz: HelixVisualizer
+    topic: str
+    round_num: int
+    max_rounds: int
+    last_contents: dict[str, str]
+    prev_phase: str | None
+    fast: bool
+
+
+def _process_agent(
+    agent: LLMAgent,
+    current_time: float,
+    ctx: _RoundContext,
+) -> LLMResult | None:
+    """Advance a single agent and return its result, or None if it didn't produce one."""
+    # Spawn if ready
+    if agent.state == AgentState.WAITING and agent.can_spawn(current_time):
+        agent.spawn(current_time)
+
+    if agent.state != AgentState.ACTIVE:
+        return None
+
+    agent.update_position(current_time)
+
+    # Phase transition animation
+    phase = agent.position.phase
+    if ctx.prev_phase and phase != ctx.prev_phase and not ctx.fast:
+        print_phase_transition(phase)
+    ctx.prev_phase = phase
+
+    if not agent.should_process_at_checkpoint():
+        return None
+
+    # Show "thinking" frame
+    _render_frame(ctx, f"{agent.agent_id} ({agent.agent_type}) processing...")
+    _pause(0.6, ctx.fast)
+
+    # Process task
+    task = LLMTask(
+        task_id=f"{agent.agent_id}-r{ctx.round_num}",
+        description=ctx.topic,
+        context="",
+        context_history=ctx.builder.get_context_history(),
+    )
+    result = agent.process_task(task)
+    agent.mark_checkpoint_processed()
+    ctx.builder.add_from_result(result)
+
+    # Route message through hub
+    spoke = ctx.spoke_mgr.get_spoke(agent.agent_id)
+    if spoke:
+        spoke.send_message(
+            message_type=MessageType.STATUS_UPDATE,
+            content={
+                "confidence": result.confidence,
+                "phase": result.position_info.get("phase", ""),
+                "progress": result.position_info.get("progress", 0.0),
+            },
+        )
+
+    ctx.last_contents[agent.agent_id] = result.content
+
+    # Render updated frame
+    _render_frame(ctx, f"{agent.agent_id} done — confidence {result.confidence:.2f}")
+    _pause(0.8, ctx.fast)
+
+    return result
+
+
+def _render_frame(ctx: _RoundContext, status: str) -> None:
+    """Build snapshots from live agents and render a visualiser frame."""
+    snapshots = [agent_to_snapshot(a, ctx.last_contents.get(a.agent_id, "")) for a in ctx.agents]
+    ctx.viz.print_frame(snapshots, ctx.round_num, ctx.max_rounds, status)
 
 
 # ---------------------------------------------------------------------------
@@ -154,103 +235,42 @@ def run_demo(
     _pause(1.0, fast)
 
     # --- Processing rounds ---
-    last_contents: dict[str, str] = {}
-    prev_phase: str | None = None
+    ctx = _RoundContext(
+        agents=agents,
+        spoke_mgr=spoke_mgr,
+        builder=builder,
+        viz=viz,
+        topic=topic,
+        round_num=0,
+        max_rounds=config.max_rounds,
+        last_contents={},
+        prev_phase=None,
+        fast=fast,
+    )
     converged = False
+    rounds_completed = 0
 
     try:
         for round_num in range(1, config.max_rounds + 1):
             current_time = round_num / max(config.max_rounds, 1)
+            ctx.round_num = round_num
             round_results: list[LLMResult] = []
 
             for agent in agents:
-                # Spawn
-                if agent.state == AgentState.WAITING and agent.can_spawn(current_time):
-                    agent.spawn(current_time)
-
-                if agent.state != AgentState.ACTIVE:
-                    continue
-
-                # Advance position
-                agent.update_position(current_time)
-
-                # Phase transition animation
-                phase = agent.position.phase
-                if prev_phase and phase != prev_phase and not fast:
-                    print_phase_transition(phase)
-                prev_phase = phase
-
-                # Checkpoint gating
-                if not agent.should_process_at_checkpoint():
-                    continue
-
-                # Show "thinking" frame
-                snapshots = [
-                    agent_to_snapshot(a, last_contents.get(a.agent_id, ""))
-                    for a in agents
-                ]
-                viz.print_frame(
-                    snapshots,
-                    round_num,
-                    config.max_rounds,
-                    f"{agent.agent_id} ({agent.agent_type}) processing...",
-                )
-                _pause(0.6, fast)
-
-                # Process task
-                task = LLMTask(
-                    task_id=f"{agent.agent_id}-r{round_num}",
-                    description=topic,
-                    context="",
-                    context_history=builder.get_context_history(),
-                )
-                result = agent.process_task(task)
-                agent.mark_checkpoint_processed()
-                builder.add_from_result(result)
-
-                # Route message
-                spoke = spoke_mgr.get_spoke(agent.agent_id)
-                if spoke:
-                    spoke.send_message(
-                        message_type=MessageType.STATUS_UPDATE,
-                        content={
-                            "confidence": result.confidence,
-                            "phase": result.position_info.get("phase", ""),
-                            "progress": result.position_info.get("progress", 0.0),
-                        },
-                    )
-
-                round_results.append(result)
-                last_contents[agent.agent_id] = result.content
-
-                # Render updated frame
-                snapshots = [
-                    agent_to_snapshot(a, last_contents.get(a.agent_id, ""))
-                    for a in agents
-                ]
-                viz.print_frame(
-                    snapshots,
-                    round_num,
-                    config.max_rounds,
-                    f"{agent.agent_id} done — confidence {result.confidence:.2f}",
-                )
-                _pause(0.8, fast)
+                result = _process_agent(agent, current_time, ctx)
+                if result:
+                    round_results.append(result)
 
             all_results.extend(round_results)
             spoke_mgr.process_all_messages()
+            rounds_completed = round_num
 
             # Convergence check
             if round_results:
                 avg = sum(r.confidence for r in round_results) / len(round_results)
                 if avg >= config.confidence_threshold:
-                    snapshots = [
-                        agent_to_snapshot(a, last_contents.get(a.agent_id, ""))
-                        for a in agents
-                    ]
-                    viz.print_frame(
-                        snapshots,
-                        round_num,
-                        config.max_rounds,
+                    _render_frame(
+                        ctx,
                         f"Converged at confidence {avg:.2f} — moving to synthesis",
                     )
                     _pause(1.5, fast)
@@ -275,8 +295,10 @@ def run_demo(
 
     # Summary stats
     total_tokens = sum(r.token_budget_used for r in all_results)
-    print(f"\n  Agents: {len(agents)}  |  Rounds: {round_num}  |  "
-          f"Tokens: {total_tokens:,}  |  Converged: {converged}")
+    print(
+        f"\n  Agents: {len(agents)}  |  Rounds: {rounds_completed}  |  "
+        f"Tokens: {total_tokens:,}  |  Converged: {converged}"
+    )
     print()
 
 
@@ -346,7 +368,7 @@ def main() -> None:
     try:
         run_demo(topic=args.topic, provider=provider, fast=args.fast)
     except KeyboardInterrupt:
-        print(f"\n\n  Demo interrupted. Thanks for watching!")
+        print("\n\n  Demo interrupted. Thanks for watching!")
         sys.exit(0)
 
 

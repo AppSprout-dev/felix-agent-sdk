@@ -67,6 +67,58 @@ This demo manually orchestrates the same components that `FelixWorkflow.run()` u
 4. **HelixVisualizer** renders agent positions on the helix cross-section each frame
 5. **WorkflowSynthesizer** produces the final merged output
 
+## Recording a GIF for Social Media
+
+The easiest way to capture a shareable terminal GIF:
+
+### Option A: VHS (recommended — deterministic, scriptable)
+
+Install [VHS](https://github.com/charmbracelet/vhs), then create a `demo.tape` file:
+
+```
+# demo.tape
+Output demo.gif
+Set Width 1200
+Set Height 800
+Set FontSize 14
+Set Theme "Dracula"
+Set Padding 20
+
+Type "python examples/05_deep_research_live/run.py"
+Enter
+Sleep 25s
+```
+
+Run it:
+
+```bash
+vhs demo.tape
+```
+
+### Option B: asciinema + agg (real recording)
+
+```bash
+# Record the session
+asciinema rec felix-demo.cast -c "python examples/05_deep_research_live/run.py"
+
+# Convert to GIF (install agg: https://github.com/asciinema/agg)
+agg felix-demo.cast felix-demo.gif --cols 120 --rows 40
+```
+
+### Option C: ttygif (lightweight)
+
+```bash
+ttyrec -e "python examples/05_deep_research_live/run.py"
+ttygif ttyrecord -f felix-demo.gif
+```
+
+### Tips for best results
+
+- Use a dark terminal theme (Dracula, One Dark, or Catppuccin work well)
+- Set terminal to at least 120 columns x 40 rows
+- Use a monospace font with good Unicode support (JetBrains Mono, Fira Code)
+- The full run with animations takes ~20 seconds — perfect length for Twitter/X
+
 ## Files
 
 | File | Purpose |

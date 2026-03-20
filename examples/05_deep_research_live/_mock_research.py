@@ -137,6 +137,42 @@ _RESPONSES: dict[tuple[str, str], list[str]] = {
             "thesis as the primary finding."
         ),
     ],
+    # ── General / synthesis agent (used by WorkflowSynthesizer) ──────
+    ("llm", "synthesis"): [
+        (
+            "## AI Agent Frameworks: State of the Field\n\n"
+            "### Key Findings\n\n"
+            "Our multi-agent research team analysed the current landscape of AI agent "
+            "frameworks through exploration, structured analysis, and critical review. "
+            "Three convergent findings emerged:\n\n"
+            "**1. The Production-Readiness Gap is the Central Challenge**\n"
+            "78% of published agent architectures have no evidence of production deployment. "
+            "The research-to-deployment pipeline takes 18-24 months, with bottlenecks in "
+            "reproducibility (only 63% of papers provide code), hardware assumptions "
+            "(72% target A100-class GPUs vs. median enterprise T4/L4), and evaluation "
+            "mismatch (academic benchmarks vs. production metrics).\n\n"
+            "**2. Developer Experience Drives Adoption More Than Capability**\n"
+            "Frameworks with <30 minute onboarding see 5x higher adoption. The newest "
+            "framework in our analysis (Framework C) has the steepest adoption curve and "
+            "highest developer satisfaction (4.6/5) despite being least mature. Compute "
+            "cost must reach <$0.01 per inference for mass-market viability.\n\n"
+            "**3. The 'Bridge Strategy' is Optimal — With Caveats**\n"
+            "Organisations maintaining both research and systems pipelines outperform "
+            "single-focus teams by ~40% on composite metrics. The critical success factor "
+            "is the translation layer between research and production. However, this "
+            "finding carries selection bias toward larger, well-resourced organisations.\n\n"
+            "### Confidence Assessment\n"
+            "- **HIGH**: Translation layer as primary bottleneck\n"
+            "- **MEDIUM**: Specific adoption rates and cost projections\n"
+            "- **LOW**: Prescriptive resource allocation (60/30/10 split)\n\n"
+            "### Recommendation\n"
+            "Teams building multi-agent systems in 2025 should prioritise developer "
+            "experience and deployment tooling over novel architectures. Invest in the "
+            "bridge between research and production — this is where the highest leverage "
+            "exists. Start with frameworks that optimise for onboarding speed and "
+            "iterate toward capability, not the reverse."
+        ),
+    ],
 }
 
 # Fallback if an exact (type, phase) key isn't found
@@ -164,15 +200,22 @@ def _detect_phase(kwargs: dict) -> str:
 
 def _detect_agent_type(kwargs: dict) -> str:
     """Best-effort agent-type detection from the system prompt."""
+    all_text = ""
     for msg in kwargs.get("messages", []):
-        content = getattr(msg, "content", "") or ""
-        lower = content.lower()
-        if "research" in lower:
-            return "research"
-        if "analysis" in lower:
-            return "analysis"
-        if "critic" in lower:
-            return "critic"
+        all_text += " " + (getattr(msg, "content", "") or "")
+    lower = all_text.lower()
+
+    # The WorkflowSynthesizer sends "Synthesise the following agent outputs"
+    # via a general ("llm") agent at t=1.0 — detect this as the "llm" type
+    # so it hits the dedicated synthesis response.
+    if "synthesise the following" in lower or "synthesize the following" in lower:
+        return "llm"
+    if "research" in lower:
+        return "research"
+    if "analysis" in lower:
+        return "analysis"
+    if "critic" in lower:
+        return "critic"
     return "research"
 
 
