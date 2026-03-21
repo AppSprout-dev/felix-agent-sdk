@@ -10,15 +10,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Set
 
-# Words ignored during keyword extraction
-_STOPWORDS: Set[str] = {
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "shall", "can", "need", "must", "to", "of",
-    "in", "for", "on", "with", "at", "by", "from", "as", "into", "about",
-    "this", "that", "these", "those", "it", "its", "not", "no", "and",
-    "or", "but", "if", "so", "than", "too", "very", "just", "also",
-}
+from felix_agent_sdk.utils.text import STOPWORDS
 
 # Minimum keyword length after stopword removal
 _MIN_KEYWORD_LEN = 3
@@ -107,7 +99,7 @@ class ContentAnalyzer:
         words = re.findall(r"[a-zA-Z]+", text.lower())
         return {
             w for w in words
-            if w not in _STOPWORDS and len(w) >= _MIN_KEYWORD_LEN
+            if w not in STOPWORDS and len(w) >= _MIN_KEYWORD_LEN
         }
 
     def _recommend_type(
