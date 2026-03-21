@@ -25,6 +25,7 @@ from felix_agent_sdk.events.bus import EventBus
 from felix_agent_sdk.events.mixins import EventEmitterMixin
 from felix_agent_sdk.events.types import EventType
 from felix_agent_sdk.providers.base import BaseProvider
+from felix_agent_sdk.spawning.spawner import DynamicSpawner
 from felix_agent_sdk.workflows.config import WorkflowConfig, WorkflowResult
 from felix_agent_sdk.workflows.context_builder import CollaborativeContextBuilder
 from felix_agent_sdk.workflows.synthesizer import WorkflowSynthesizer
@@ -84,6 +85,15 @@ class FelixWorkflow(EventEmitterMixin):
         builder = CollaborativeContextBuilder()
         all_results: list[LLMResult] = []
 
+        spawner: Optional[DynamicSpawner] = None
+        if self._config.enable_dynamic_spawning:
+            spawner = DynamicSpawner(
+                factory=self._factory,
+                spoke_mgr=spoke_mgr,
+                max_spawned=self._config.max_dynamic_agents,
+                event_bus=getattr(self, "_event_bus", None),
+            )
+
         self.emit_event(
             EventType.WORKFLOW_STARTED,
             {
@@ -132,8 +142,12 @@ class FelixWorkflow(EventEmitterMixin):
                     },
                 )
 
-                # Dynamic spawning hook (no-op for now)
-                self._check_dynamic_spawning(agents, round_results)
+                # Dynamic spawning
+                if spawner is not None:
+                    new_agents = spawner.check_and_spawn(
+                        agents, round_results, current_time
+                    )
+                    agents.extend(new_agents)
 
                 # Convergence check
                 if round_results and avg_confidence >= self._config.confidence_threshold:
@@ -280,21 +294,6 @@ class FelixWorkflow(EventEmitterMixin):
         spoke_mgr.process_all_messages()
 
         return round_results
-
-    # ------------------------------------------------------------------
-    # Dynamic spawning hook
-    # ------------------------------------------------------------------
-
-    def _check_dynamic_spawning(
-        self,
-        agents: list[LLMAgent],
-        round_results: list[LLMResult],
-    ) -> None:
-        """Hook for confidence-driven dynamic spawning.
-
-        Currently a no-op. Will be wired when the ``spawning/`` module
-        is implemented.
-        """
 
     # ------------------------------------------------------------------
     # Convenience function

@@ -33,6 +33,7 @@ from felix_agent_sdk.providers import (
 from felix_agent_sdk.communication import CentralPost, Message, MessageType, Spoke
 from felix_agent_sdk.events import EventBus, EventType, FelixEvent
 from felix_agent_sdk.memory import ContextCompressor, KnowledgeStore, TaskMemory
+from felix_agent_sdk.spawning import ConfidenceMonitor, DynamicSpawner
 from felix_agent_sdk.streaming import StreamEvent, StreamHandler
 from felix_agent_sdk.tokens import TokenBudget
 from felix_agent_sdk.utils import configure_logging
@@ -73,6 +74,9 @@ __all__ = [
     "EventBus",
     "EventType",
     "FelixEvent",
+    # Spawning
+    "DynamicSpawner",
+    "ConfidenceMonitor",
     # Streaming
     "StreamEvent",
     "StreamHandler",

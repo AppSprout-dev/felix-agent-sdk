@@ -63,6 +63,8 @@ class WorkflowConfig:
     max_agents: int = 10
     enable_context_compression: bool = True
     compression_config: Optional[CompressionConfig] = None
+    enable_dynamic_spawning: bool = False
+    max_dynamic_agents: int = 3
 
 
 # ------------------------------------------------------------------
