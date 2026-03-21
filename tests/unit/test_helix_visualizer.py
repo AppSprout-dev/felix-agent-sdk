@@ -317,3 +317,39 @@ class TestConfidenceMonitorIntegration:
         assert "Confidence" in output
         # Should not crash without monitor
         assert "Trend" not in output
+
+
+# ------------------------------------------------------------------
+# Windows encoding fallback
+# ------------------------------------------------------------------
+
+
+class TestRenderEncodingFallback:
+    def test_render_survives_unicode_encode_error(self, viz, monkeypatch):
+        """render() should not crash when stdout can't handle Unicode."""
+        import io
+
+        viz.register_agent("a1", "Agent1", color="cyan")
+        viz.update("a1", 0.5, 0.8)
+
+        # Simulate a stdout that raises UnicodeEncodeError on write
+        class FakeStdout:
+            def write(self, s):
+                raise UnicodeEncodeError("cp1252", s, 0, 1, "bad char")
+
+            def flush(self):
+                ...  # intentionally empty — test double
+
+            buffer = io.BytesIO()
+
+            def reconfigure(self, **kwargs):
+                ...  # intentionally empty — simulates already-reconfigured
+
+        fake = FakeStdout()
+        monkeypatch.setattr("sys.stdout", fake)
+
+        # Should not raise — falls back to buffer.write(utf-8)
+        viz.render()
+
+        # Verify something was written to the buffer
+        assert fake.buffer.tell() > 0

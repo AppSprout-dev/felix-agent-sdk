@@ -398,7 +398,8 @@ class TestLifecycleCallbacks:
 
     def test_remove_lifecycle_callback(self, central_post):
         log = []
-        cb = lambda aid: log.append(aid)
+        def cb(aid):
+            return log.append(aid)
         central_post.add_lifecycle_callback(AgentLifecycleEvent.FAILED, cb)
         central_post.remove_lifecycle_callback(AgentLifecycleEvent.FAILED, cb)
         central_post.emit_lifecycle_event(AgentLifecycleEvent.FAILED, "agent-1")

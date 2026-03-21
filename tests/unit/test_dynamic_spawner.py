@@ -9,7 +9,7 @@ from felix_agent_sdk.agents.llm_agent import LLMResult
 from felix_agent_sdk.communication.central_post import CentralPost
 from felix_agent_sdk.communication.spoke import SpokeManager
 from felix_agent_sdk.core.helix import HelixConfig
-from felix_agent_sdk.events import EventBus, EventType
+from felix_agent_sdk.events import EventBus
 from felix_agent_sdk.providers.base import BaseProvider
 from felix_agent_sdk.providers.types import CompletionResult
 from felix_agent_sdk.spawning import ConfidenceMonitor, DynamicSpawner

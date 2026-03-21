@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from felix_agent_sdk.events import EventBus, EventType
+from felix_agent_sdk.events import EventBus
 from felix_agent_sdk.providers.types import StreamChunk
 from felix_agent_sdk.streaming import (
     CallbackStreamHandler,

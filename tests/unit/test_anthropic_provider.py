@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,7 +18,6 @@ from felix_agent_sdk.providers.types import (
     ChatMessage,
     CompletionResult,
     MessageRole,
-    StreamChunk,
 )
 
 

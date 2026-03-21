@@ -20,7 +20,7 @@ import os
 
 import pytest
 
-from felix_agent_sdk.providers.types import ChatMessage, CompletionResult, MessageRole, StreamChunk
+from felix_agent_sdk.providers.types import ChatMessage, CompletionResult, MessageRole
 
 # ---------------------------------------------------------------------------
 # Skip conditions

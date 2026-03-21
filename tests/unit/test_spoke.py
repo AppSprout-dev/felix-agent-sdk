@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
 
 from felix_agent_sdk.communication.central_post import CentralPost
 from felix_agent_sdk.communication.messages import Message, MessageType
@@ -384,7 +383,7 @@ class TestSpokeManagerBroadcast:
         assert len(confirmations) == 2
 
     def test_broadcast_skips_disconnected_spokes(self, central_post, spoke_manager):
-        spoke1 = spoke_manager.create_spoke("agent-1")
+        spoke_manager.create_spoke("agent-1")
         spoke2 = spoke_manager.create_spoke("agent-2")
         spoke2.disconnect()
         confirmations = spoke_manager.broadcast_message(

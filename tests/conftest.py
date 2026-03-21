@@ -17,7 +17,6 @@ from felix_agent_sdk.providers.types import (
     CompletionResult,
     MessageRole,
     ProviderConfig,
-    StreamChunk,
 )
 
 

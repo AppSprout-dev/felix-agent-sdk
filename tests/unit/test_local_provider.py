@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from felix_agent_sdk.providers.local import LocalProvider
 from felix_agent_sdk.providers.openai_provider import OpenAIProvider
