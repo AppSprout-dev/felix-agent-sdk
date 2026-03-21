@@ -24,7 +24,8 @@ def main(argv: list[str] | None = None) -> int:
     init_p = subparsers.add_parser("init", help="Scaffold a new Felix project")
     init_p.add_argument("name", help="Project directory name")
     init_p.add_argument(
-        "--template", "-t",
+        "--template",
+        "-t",
         default="research",
         choices=["research", "analysis", "review"],
         help="Workflow template (default: research)",
@@ -35,6 +36,9 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("config", help="Path to felix.yaml")
     run_p.add_argument("--provider", "-p", default=None, help="Override provider name")
     run_p.add_argument("--verbose", "-v", action="store_true", help="Enable debug logging")
+    run_p.add_argument(
+        "--visualize", "-V", action="store_true", help="Show live helix visualization"
+    )
 
     # --- version ---
     subparsers.add_parser("version", help="Show SDK version")
@@ -49,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         from felix_agent_sdk.cli.run_command import run_workflow
 
-        return run_workflow(args.config, args.provider, args.verbose)
+        return run_workflow(args.config, args.provider, args.verbose, args.visualize)
 
     if args.command == "version":
         from felix_agent_sdk._version import __version__

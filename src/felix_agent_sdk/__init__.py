@@ -38,6 +38,7 @@ from felix_agent_sdk.streaming import StreamEvent, StreamHandler
 from felix_agent_sdk.tokens import TokenBudget
 from felix_agent_sdk.utils import configure_logging
 from felix_agent_sdk.workflows import FelixWorkflow, WorkflowConfig, run_felix_workflow
+from felix_agent_sdk.visualization import HelixVisualizer
 
 __all__ = [
     "__version__",
@@ -84,4 +85,6 @@ __all__ = [
     "configure_logging",
     # Tokens
     "TokenBudget",
+    # Visualization
+    "HelixVisualizer",
 ]
