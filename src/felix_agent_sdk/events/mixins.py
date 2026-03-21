@@ -15,13 +15,16 @@ class EventEmitterMixin:
     to :meth:`emit_event` dispatch a :class:`FelixEvent` onto the bus.
     When no bus is attached, :meth:`emit_event` is a silent no-op —
     zero overhead for users who don't enable observability.
+
+    Note: ``_event_bus`` is declared as a class-level annotation for type
+    checkers but always written to the *instance* dict via ``set_event_bus``.
     """
 
-    _event_bus: Optional[EventBus] = None
+    _event_bus: Optional[EventBus]
 
     def set_event_bus(self, bus: Optional[EventBus]) -> None:
-        """Attach or detach an event bus."""
-        self._event_bus = bus
+        """Attach or detach an event bus (writes to instance, not class)."""
+        self.__dict__["_event_bus"] = bus
 
     def emit_event(
         self,
@@ -37,7 +40,7 @@ class EventEmitterMixin:
             data: Arbitrary payload dict.
             source: Override the default source identifier.
         """
-        if self._event_bus is None:
+        if getattr(self, "_event_bus", None) is None:
             return
         event = FelixEvent(
             event_type=event_type,

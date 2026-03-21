@@ -19,18 +19,19 @@ class EventType(str, Enum):
     so subscribers can match by prefix (e.g. ``"agent.*"``).
     """
 
-    # Agent lifecycle
+    # Agent lifecycle — SPAWNED/COMPLETED/FAILED bridged from CentralPost
     AGENT_SPAWNED = "agent.spawned"
     AGENT_COMPLETED = "agent.completed"
     AGENT_FAILED = "agent.failed"
+    # TODO: emit from Agent.update_position() and should_process_at_checkpoint()
     AGENT_POSITION_UPDATED = "agent.position_updated"
     AGENT_CHECKPOINT = "agent.checkpoint"
 
-    # Task processing
+    # Task processing — emitted from LLMAgent.process_task()
     TASK_STARTED = "task.started"
     TASK_COMPLETED = "task.completed"
 
-    # Workflow lifecycle
+    # Workflow lifecycle — emitted from FelixWorkflow.run()
     WORKFLOW_STARTED = "workflow.started"
     WORKFLOW_ROUND_STARTED = "workflow.round.started"
     WORKFLOW_ROUND_COMPLETED = "workflow.round.completed"
@@ -39,14 +40,15 @@ class EventType(str, Enum):
     WORKFLOW_COMPLETED = "workflow.completed"
 
     # Communication
+    # TODO: emit from CentralPost.queue_message() and _handle_message()
     MESSAGE_QUEUED = "message.queued"
     MESSAGE_PROCESSED = "message.processed"
 
-    # Streaming (wired in PR #3)
+    # Streaming — wired in feat/streaming PR
     STREAM_TOKEN = "stream.token"
     STREAM_COMPLETED = "stream.completed"
 
-    # Dynamic spawning (wired in PR #4)
+    # Dynamic spawning — wired in feat/dynamic-spawning PR
     SPAWN_TRIGGERED = "spawn.triggered"
     SPAWN_COMPLETED = "spawn.completed"
 

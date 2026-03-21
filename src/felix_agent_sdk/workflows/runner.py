@@ -54,8 +54,7 @@ class FelixWorkflow(EventEmitterMixin):
         self._config = config
         self._provider = provider
         self._factory = AgentFactory(provider, helix_config=config.helix_config)
-        if event_bus is not None:
-            self.set_event_bus(event_bus)
+        self.set_event_bus(event_bus)
 
     # ------------------------------------------------------------------
     # Public API

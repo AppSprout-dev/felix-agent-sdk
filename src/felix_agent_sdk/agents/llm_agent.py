@@ -107,8 +107,7 @@ class LLMAgent(Agent, EventEmitterMixin):
 
         self.provider = provider
         self.agent_type = agent_type
-        if event_bus is not None:
-            self.set_event_bus(event_bus)
+        self.set_event_bus(event_bus)
 
         self.temperature_range = temperature_range or _DEFAULT_TEMPERATURE_RANGES.get(
             agent_type, _DEFAULT_TEMP_RANGE
