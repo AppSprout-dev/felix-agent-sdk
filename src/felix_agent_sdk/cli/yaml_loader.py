@@ -125,8 +125,9 @@ def _parse_team(
         if isinstance(entry, str):
             result.append((entry, {}))
         elif isinstance(entry, dict):
-            agent_type = entry.pop("type", "llm")
-            result.append((str(agent_type), dict(entry)))
+            agent_type = entry.get("type", "llm")
+            extra = {k: v for k, v in entry.items() if k != "type"}
+            result.append((str(agent_type), extra))
         else:
             raise ValueError(f"Team entry must be a string or dict, got {type(entry).__name__}")
     return result
