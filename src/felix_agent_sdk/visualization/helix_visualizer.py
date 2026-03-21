@@ -286,8 +286,21 @@ class HelixVisualizer:
             day: Current simulation day for the header.
             extra_info: Arbitrary key-value pairs shown in the header.
         """
-        sys.stdout.write(clear_screen())
-        sys.stdout.write(self.render_to_string(tick=tick, day=day, extra_info=extra_info))
+        # Ensure stdout can handle Unicode block-drawing characters on Windows
+        # where the default encoding is cp1252.
+        if hasattr(sys.stdout, "reconfigure"):
+            try:
+                sys.stdout.reconfigure(encoding="utf-8")
+            except (AttributeError, OSError):
+                pass  # already reconfigured, unsupported, or redirected stream
+
+        output = clear_screen() + self.render_to_string(
+            tick=tick, day=day, extra_info=extra_info
+        )
+        try:
+            sys.stdout.write(output)
+        except UnicodeEncodeError:
+            sys.stdout.buffer.write(output.encode("utf-8"))
         sys.stdout.flush()
 
     def render_to_string(

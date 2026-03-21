@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
 
 from felix_agent_sdk.memory.task_memory import (
     TaskComplexity,
     TaskExecution,
-    TaskMemory,
     TaskMemoryQuery,
     TaskOutcome,
     TaskPattern,

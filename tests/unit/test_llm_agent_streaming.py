@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 from felix_agent_sdk.agents.llm_agent import LLMAgent, LLMTask
 from felix_agent_sdk.core.helix import HelixConfig, HelixGeometry
-from felix_agent_sdk.events import EventBus, EventType
+from felix_agent_sdk.events import EventBus
 from felix_agent_sdk.providers.base import BaseProvider
 from felix_agent_sdk.providers.types import CompletionResult, StreamChunk
 from felix_agent_sdk.streaming import CallbackStreamHandler, StreamHandler

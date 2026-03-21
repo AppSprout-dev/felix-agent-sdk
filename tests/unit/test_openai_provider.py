@@ -18,7 +18,6 @@ from felix_agent_sdk.providers.types import (
     ChatMessage,
     CompletionResult,
     MessageRole,
-    StreamChunk,
 )
 
 

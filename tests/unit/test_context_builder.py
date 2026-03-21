@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from felix_agent_sdk.workflows.context_builder import (
     CollaborativeContextBuilder,

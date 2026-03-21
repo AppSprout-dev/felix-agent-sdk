@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
 
 from felix_agent_sdk.providers.base import BaseProvider
 from felix_agent_sdk.providers.types import CompletionResult
@@ -157,7 +156,7 @@ class TestWorkflowCleanup:
         )
         workflow = FelixWorkflow(config, provider)
 
-        result = workflow.run("Test cleanup")
+        workflow.run("Test cleanup")
 
         # If cleanup failed we'd get errors on subsequent runs
         result2 = workflow.run("Second run")

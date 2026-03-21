@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 
-import pytest
 
 from felix_agent_sdk.events import EventBus, EventType, FelixEvent
 from felix_agent_sdk.utils.logging import (
@@ -25,7 +24,6 @@ def _capture_handler() -> logging.Handler:
     """Return a handler that stores formatted records in handler.records."""
     handler = logging.StreamHandler()
     handler.records: list[str] = []  # type: ignore[attr-defined]
-    original_emit = handler.emit
 
     def capturing_emit(record: logging.LogRecord) -> None:
         handler.records.append(handler.format(record))  # type: ignore[attr-defined]
@@ -169,7 +167,7 @@ class TestEventLogBridge:
         configure_logging(FelixLogConfig(level="DEBUG", output_handler=handler))
 
         bus = EventBus()
-        bridge = EventLogBridge(bus)
+        EventLogBridge(bus)
 
         bus.emit(FelixEvent(
             event_type=EventType.WORKFLOW_STARTED,
@@ -184,7 +182,7 @@ class TestEventLogBridge:
         configure_logging(FelixLogConfig(level="DEBUG", format="json", output_handler=handler))
 
         bus = EventBus()
-        bridge = EventLogBridge(bus)
+        EventLogBridge(bus)
 
         bus.emit(FelixEvent(
             event_type=EventType.TASK_COMPLETED,
@@ -215,7 +213,7 @@ class TestEventLogBridge:
         configure_logging(FelixLogConfig(level="DEBUG", output_handler=handler))
 
         bus = EventBus()
-        bridge = EventLogBridge(bus, level_map={"custom.event": "WARNING"})
+        EventLogBridge(bus, level_map={"custom.event": "WARNING"})
 
         bus.emit(FelixEvent(event_type="custom.event", source="test"))
 
@@ -226,7 +224,7 @@ class TestEventLogBridge:
         configure_logging(FelixLogConfig(level="DEBUG", output_handler=handler))
 
         bus = EventBus()
-        bridge = EventLogBridge(bus)
+        EventLogBridge(bus)
 
         bus.emit(FelixEvent(event_type="unknown.event.type", source="test"))
 
@@ -237,7 +235,7 @@ class TestEventLogBridge:
         configure_logging(FelixLogConfig(level="DEBUG", output_handler=handler))
 
         bus = EventBus()
-        bridge = EventLogBridge(bus)
+        EventLogBridge(bus)
 
         bus.emit(FelixEvent(event_type=EventType.WORKFLOW_STARTED, source="wf"))
         bus.emit(FelixEvent(event_type=EventType.WORKFLOW_COMPLETED, source="wf"))

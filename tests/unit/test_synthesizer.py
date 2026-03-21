@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
 
 from felix_agent_sdk.agents.llm_agent import LLMResult
 from felix_agent_sdk.providers.base import BaseProvider
@@ -108,7 +107,7 @@ class TestCompressedMergeStrategy:
         synth = WorkflowSynthesizer(provider, config)
 
         results = [_make_result("a1", "Data", 0.5)]
-        output = synth.synthesize(results, "task")
+        synth.synthesize(results, "task")
         assert provider.complete.called
 
 

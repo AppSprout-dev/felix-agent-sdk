@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 
 import pytest
 
@@ -10,7 +9,6 @@ from felix_agent_sdk.memory.knowledge_store import (
     ConfidenceLevel,
     KnowledgeEntry,
     KnowledgeQuery,
-    KnowledgeStore,
     KnowledgeType,
 )
 
