@@ -30,6 +30,16 @@ PHASE_COLORS: Dict[str, str] = {
     "synthesis": GREEN,
 }
 
+# Friendly name → ANSI code mapping (used by HelixVisualizer.register_agent)
+COLOR_MAP: Dict[str, str] = {
+    "cyan": CYAN,
+    "yellow": YELLOW,
+    "green": GREEN,
+    "red": RED,
+    "magenta": MAGENTA,
+    "white": "\033[97m",
+}
+
 
 # ---------------------------------------------------------------------------
 # Capability detection

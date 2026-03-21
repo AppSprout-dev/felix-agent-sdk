@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterator, List, Optional
 from felix_agent_sdk.core.helix import ANALYSIS_END, EXPLORATION_END, HelixGeometry
 from felix_agent_sdk.visualization.terminal import (
     BOLD,
+    COLOR_MAP,
     DIM,
     PHASE_COLORS,
     RESET,
@@ -28,19 +29,6 @@ from felix_agent_sdk.visualization.terminal import (
     progress_bar,
     show_cursor,
 )
-
-# ---------------------------------------------------------------------------
-# Colour-name → ANSI-code mapping
-# ---------------------------------------------------------------------------
-
-_COLOR_MAP: Dict[str, str] = {
-    "cyan": "\033[96m",
-    "yellow": "\033[93m",
-    "green": "\033[92m",
-    "red": "\033[91m",
-    "magenta": "\033[95m",
-    "white": "\033[97m",
-}
 
 # Phase boundary glyphs
 _PHASE_ICONS: Dict[str, str] = {
@@ -141,7 +129,7 @@ class HelixVisualizer:
             color: Colour name — one of ``'cyan'``, ``'yellow'``, ``'green'``,
                 ``'red'``, ``'magenta'``, ``'white'``.
         """
-        ansi = _COLOR_MAP.get(color, _COLOR_MAP["cyan"])
+        ansi = COLOR_MAP.get(color, COLOR_MAP["cyan"])
         self._agents[agent_id] = AgentDisplayState(
             agent_id=agent_id,
             label=label,
