@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 EventCallback = Callable[[FelixEvent], None]
 
 
+# Enough to capture a full workflow run (~20 rounds × ~10 agents × ~3 events)
+# without unbounded growth in long-running processes.
+_DEFAULT_MAX_HISTORY = 10_000
+
+
 class EventBus:
     """Synchronous event bus with prefix-pattern subscriptions.
 
@@ -48,16 +53,24 @@ class EventBus:
         self._lock = threading.Lock()
         self._history: List[FelixEvent] = []
         self._record_history = False
+        self._max_history_size = _DEFAULT_MAX_HISTORY
 
     # ------------------------------------------------------------------
     # Configuration
     # ------------------------------------------------------------------
 
-    def enable_history(self, enabled: bool = True) -> None:
+    def enable_history(self, enabled: bool = True, max_size: int = _DEFAULT_MAX_HISTORY) -> None:
         """Toggle event recording. When enabled, all emitted events are
-        stored in :attr:`history` for later inspection."""
+        stored in :attr:`history` for later inspection.
+
+        Args:
+            enabled: Whether to record events.
+            max_size: Maximum number of events to retain. Oldest events
+                are discarded when the limit is reached.
+        """
         with self._lock:
             self._record_history = enabled
+            self._max_history_size = max_size
             if not enabled:
                 self._history.clear()
 
@@ -120,6 +133,8 @@ class EventBus:
         with self._lock:
             if self._record_history:
                 self._history.append(event)
+                if len(self._history) > self._max_history_size:
+                    self._history = self._history[-self._max_history_size:]
 
             targets: List[EventCallback] = []
 
