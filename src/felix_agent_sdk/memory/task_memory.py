@@ -17,6 +17,8 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
+from felix_agent_sdk.utils.text import STOPWORDS
+
 from felix_agent_sdk.memory.backends.base import BaseBackend
 from felix_agent_sdk.memory.backends.sqlite import SQLiteBackend
 
@@ -49,47 +51,8 @@ class TaskComplexity(Enum):
 # Helpers
 # ------------------------------------------------------------------
 
-_STOPWORDS: set[str] = {
-    "the",
-    "and",
-    "for",
-    "are",
-    "but",
-    "not",
-    "you",
-    "all",
-    "can",
-    "had",
-    "her",
-    "was",
-    "one",
-    "our",
-    "out",
-    "day",
-    "get",
-    "has",
-    "him",
-    "his",
-    "how",
-    "its",
-    "may",
-    "new",
-    "now",
-    "old",
-    "see",
-    "two",
-    "who",
-    "boy",
-    "did",
-    "man",
-    "she",
-    "use",
-    "way",
-    "oil",
-    "sit",
-    "set",
-    "run",
-}
+# Stopwords imported from shared utils
+_STOPWORDS = STOPWORDS
 
 
 def _get_enum_value(value: Any) -> str:

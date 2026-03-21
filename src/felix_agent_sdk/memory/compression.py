@@ -12,6 +12,8 @@ import hashlib
 import json
 import re
 import time
+
+from felix_agent_sdk.utils.text import STOPWORDS
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
@@ -91,77 +93,8 @@ class CompressionConfig:
     relevance_threshold: float = 0.3
 
 
-# ------------------------------------------------------------------
-# Stopwords (shared with keyword extraction)
-# ------------------------------------------------------------------
-
-_STOPWORDS: set[str] = {
-    "the",
-    "and",
-    "for",
-    "are",
-    "but",
-    "not",
-    "you",
-    "all",
-    "can",
-    "had",
-    "her",
-    "was",
-    "one",
-    "our",
-    "out",
-    "day",
-    "get",
-    "has",
-    "him",
-    "his",
-    "how",
-    "its",
-    "may",
-    "new",
-    "now",
-    "old",
-    "see",
-    "two",
-    "who",
-    "boy",
-    "did",
-    "man",
-    "she",
-    "use",
-    "way",
-    "where",
-    "much",
-    "your",
-    "from",
-    "they",
-    "know",
-    "want",
-    "been",
-    "good",
-    "much",
-    "some",
-    "time",
-    "very",
-    "when",
-    "come",
-    "here",
-    "just",
-    "like",
-    "long",
-    "make",
-    "many",
-    "over",
-    "such",
-    "take",
-    "than",
-    "them",
-    "well",
-    "were",
-    "will",
-    "with",
-}
+# Stopwords imported from shared utils
+_STOPWORDS = STOPWORDS
 
 
 # ------------------------------------------------------------------

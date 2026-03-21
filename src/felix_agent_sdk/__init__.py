@@ -31,9 +31,14 @@ from felix_agent_sdk.providers import (
     auto_detect_provider,
 )
 from felix_agent_sdk.communication import CentralPost, Message, MessageType, Spoke
+from felix_agent_sdk.events import EventBus, EventType, FelixEvent
 from felix_agent_sdk.memory import ContextCompressor, KnowledgeStore, TaskMemory
+from felix_agent_sdk.spawning import ConfidenceMonitor, DynamicSpawner
+from felix_agent_sdk.streaming import StreamEvent, StreamHandler
 from felix_agent_sdk.tokens import TokenBudget
+from felix_agent_sdk.utils import configure_logging
 from felix_agent_sdk.workflows import FelixWorkflow, WorkflowConfig, run_felix_workflow
+from felix_agent_sdk.visualization import HelixVisualizer
 
 __all__ = [
     "__version__",
@@ -66,6 +71,20 @@ __all__ = [
     "FelixWorkflow",
     "run_felix_workflow",
     "WorkflowConfig",
+    # Events
+    "EventBus",
+    "EventType",
+    "FelixEvent",
+    # Spawning
+    "DynamicSpawner",
+    "ConfidenceMonitor",
+    # Streaming
+    "StreamEvent",
+    "StreamHandler",
+    # Logging
+    "configure_logging",
     # Tokens
     "TokenBudget",
+    # Visualization
+    "HelixVisualizer",
 ]

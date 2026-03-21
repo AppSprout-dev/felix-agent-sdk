@@ -16,6 +16,8 @@ from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from felix_agent_sdk.communication.messages import Message, MessageType
 from felix_agent_sdk.communication.registry import AgentRegistry
+from felix_agent_sdk.events.bus import EventBus
+from felix_agent_sdk.events.types import EventType, FelixEvent
 
 if TYPE_CHECKING:
     from felix_agent_sdk.agents.base import Agent
@@ -35,6 +37,14 @@ class AgentLifecycleEvent(Enum):
     SPAWNED = "spawned"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+# Map legacy lifecycle events to the new EventType system.
+_LIFECYCLE_TO_EVENT_TYPE: Dict[AgentLifecycleEvent, str] = {
+    AgentLifecycleEvent.SPAWNED: EventType.AGENT_SPAWNED,
+    AgentLifecycleEvent.COMPLETED: EventType.AGENT_COMPLETED,
+    AgentLifecycleEvent.FAILED: EventType.AGENT_FAILED,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -65,10 +75,12 @@ class CentralPost:
         max_agents: int = 25,
         enable_metrics: bool = False,
         provider: Optional[BaseProvider] = None,
+        event_bus: Optional[EventBus] = None,
     ) -> None:
         self._max_agents = max_agents
         self._enable_metrics = enable_metrics
         self._provider = provider
+        self._event_bus = event_bus
 
         # Agent tracking
         self._registered_agents: Dict[str, Any] = {}
@@ -545,6 +557,8 @@ class CentralPost:
     def emit_lifecycle_event(self, event: AgentLifecycleEvent, agent_id: str) -> None:
         """Invoke all callbacks registered for *event*.
 
+        Also emits onto the attached :class:`EventBus` if present.
+
         Args:
             event: The lifecycle event that occurred.
             agent_id: The agent ID to pass to each callback.
@@ -557,6 +571,18 @@ class CentralPost:
                     "Lifecycle callback error for event %s, agent %s",
                     event.value,
                     agent_id,
+                )
+
+        # Bridge to EventBus
+        if self._event_bus is not None:
+            event_type = _LIFECYCLE_TO_EVENT_TYPE.get(event)
+            if event_type is not None:
+                self._event_bus.emit(
+                    FelixEvent(
+                        event_type=event_type,
+                        source=f"agent:{agent_id}",
+                        data={"agent_id": agent_id},
+                    )
                 )
 
     # ------------------------------------------------------------------

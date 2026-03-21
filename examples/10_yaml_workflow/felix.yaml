@@ -1,0 +1,20 @@
+# Example Felix workflow config
+# Run with: felix run examples/10_yaml_workflow/felix.yaml
+
+provider: openai
+model: gpt-4o-mini
+
+helix: research_heavy
+max_rounds: 3
+confidence_threshold: 0.78
+
+team:
+  - type: research
+  - type: research
+  - type: analysis
+  - type: critic
+
+enable_dynamic_spawning: true
+max_dynamic_agents: 2
+
+task: "What are the key challenges and opportunities in quantum computing for cryptography?"
