@@ -51,6 +51,9 @@ dev = [
     "mkdocs-material>=9.0",
 ]
 
+[project.scripts]
+felix = "felix_agent_sdk.cli.main:main"
+
 [project.urls]
 Homepage = "https://github.com/AppSprout-dev/felix-agent-sdk"
 Documentation = "https://felix-sdk.appsprout.dev"
