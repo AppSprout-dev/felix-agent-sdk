@@ -1,8 +1,18 @@
 """Felix shared utilities.
 
-Logging, configuration loading, and common type definitions.
-
-Status: Stub — populated as needed during implementation.
+Logging configuration, event-log bridging, and common helpers.
 """
 
-__all__: list[str] = []
+from felix_agent_sdk.utils.logging import (
+    EventLogBridge,
+    FelixLogConfig,
+    JSONFormatter,
+    configure_logging,
+)
+
+__all__ = [
+    "configure_logging",
+    "FelixLogConfig",
+    "JSONFormatter",
+    "EventLogBridge",
+]

@@ -34,6 +34,7 @@ from felix_agent_sdk.communication import CentralPost, Message, MessageType, Spo
 from felix_agent_sdk.events import EventBus, EventType, FelixEvent
 from felix_agent_sdk.memory import ContextCompressor, KnowledgeStore, TaskMemory
 from felix_agent_sdk.tokens import TokenBudget
+from felix_agent_sdk.utils import configure_logging
 from felix_agent_sdk.workflows import FelixWorkflow, WorkflowConfig, run_felix_workflow
 
 __all__ = [
@@ -71,6 +72,8 @@ __all__ = [
     "EventBus",
     "EventType",
     "FelixEvent",
+    # Logging
+    "configure_logging",
     # Tokens
     "TokenBudget",
 ]

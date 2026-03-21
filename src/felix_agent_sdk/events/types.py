@@ -58,7 +58,9 @@ class FelixEvent:
     """An immutable record of something that happened in the SDK.
 
     Attributes:
-        event_type: The event category (from :class:`EventType` or a custom string).
+        event_type: The event category as a plain string.  Accepts
+            :class:`EventType` enum members — they are normalised to
+            their ``.value`` on construction.
         source: Identifies the emitter, e.g. ``"workflow"`` or ``"agent:research-001"``.
         data: Arbitrary payload. Contents vary by event type.
         timestamp: Monotonic timestamp (seconds) when the event was created.
@@ -68,3 +70,11 @@ class FelixEvent:
     source: str
     data: Dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.monotonic)
+
+    def __post_init__(self) -> None:
+        # Normalise EventType enum members to plain strings so that
+        # str(), logging %-formatting, and == comparisons all behave
+        # consistently across Python versions.
+        et = self.event_type
+        if hasattr(et, "value"):
+            object.__setattr__(self, "event_type", et.value)
