@@ -291,8 +291,8 @@ class HelixVisualizer:
         if hasattr(sys.stdout, "reconfigure"):
             try:
                 sys.stdout.reconfigure(encoding="utf-8")
-            except AttributeError:
-                pass  # already reconfigured or not supported
+            except (AttributeError, OSError):
+                pass  # already reconfigured, unsupported, or redirected stream
 
         output = clear_screen() + self.render_to_string(
             tick=tick, day=day, extra_info=extra_info
