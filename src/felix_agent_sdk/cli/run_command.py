@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from contextlib import nullcontext
 
 from felix_agent_sdk.cli.yaml_loader import load_workflow_yaml
 from felix_agent_sdk.providers.base import BaseProvider
@@ -10,8 +11,19 @@ from felix_agent_sdk.utils.logging import FelixLogConfig, configure_logging
 from felix_agent_sdk.workflows.runner import run_felix_workflow
 
 
-def run_workflow(config_path: str, provider_name: str | None, verbose: bool) -> int:
+def run_workflow(
+    config_path: str,
+    provider_name: str | None,
+    verbose: bool,
+    visualize: bool = False,
+) -> int:
     """Load a YAML config, resolve the provider, and run the workflow.
+
+    Args:
+        config_path: Path to the ``felix.yaml`` config file.
+        provider_name: Override provider name (``None`` = use config).
+        verbose: Enable debug logging.
+        visualize: Show live helix visualization during the run.
 
     Returns:
         Exit code (0 = success, 1 = error).
@@ -40,17 +52,39 @@ def run_workflow(config_path: str, provider_name: str | None, verbose: bool) -> 
         )
         return 1
 
-    print("Running Felix workflow...")
-    print(f"  Provider: {effective_provider or 'auto'}")
-    print(f"  Task: {task[:80]}{'...' if len(task) > 80 else ''}")
-    print(f"  Team: {len(config.team_composition)} agents, {config.max_rounds} rounds")
-    print()
+    # Optional visualization
+    event_bus = None
+    viz = None
 
-    try:
-        result = run_felix_workflow(config, provider, task)
-    except Exception as e:
-        print(f"Error during workflow: {e}", file=sys.stderr)
-        return 1
+    if visualize:
+        from felix_agent_sdk.events import EventBus
+        from felix_agent_sdk.visualization import HelixVisualizer
+
+        event_bus = EventBus()
+        helix = config.helix_config.to_geometry()
+        viz = HelixVisualizer(helix)
+        viz.attach_event_bus(event_bus)
+
+        def _on_round_complete(event):  # type: ignore[no-untyped-def]
+            viz.render(tick=event.data.get("round", 0))
+
+        event_bus.subscribe("workflow.round.completed", _on_round_complete)
+    else:
+        print("Running Felix workflow...")
+        print(f"  Provider: {effective_provider or 'auto'}")
+        print(f"  Task: {task[:80]}{'...' if len(task) > 80 else ''}")
+        print(f"  Team: {len(config.team_composition)} agents, {config.max_rounds} rounds")
+        print()
+
+    ctx = viz.live() if viz else nullcontext()
+    with ctx:
+        try:
+            result = run_felix_workflow(config, provider, task, event_bus=event_bus)
+        except Exception as e:
+            print(f"Error during workflow: {e}", file=sys.stderr)
+            return 1
+        if viz:
+            viz.render()
 
     print("=== Result ===")
     print(f"Rounds: {result.total_rounds}")

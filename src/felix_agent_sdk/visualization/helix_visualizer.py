@@ -17,6 +17,11 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, Optional
 
 from felix_agent_sdk.core.helix import ANALYSIS_END, EXPLORATION_END, HelixGeometry
+from felix_agent_sdk.events.bus import EventBus
+from felix_agent_sdk.events.types import EventType, FelixEvent
+from felix_agent_sdk.spawning.confidence_monitor import ConfidenceMonitor
+from felix_agent_sdk.streaming.handler import StreamHandler
+from felix_agent_sdk.streaming.types import StreamEvent
 from felix_agent_sdk.visualization.terminal import (
     BOLD,
     COLOR_MAP,
@@ -35,6 +40,14 @@ _PHASE_ICONS: Dict[str, str] = {
     "exploration": "~",
     "analysis": "=",
     "synthesis": "#",
+}
+
+# Agent-type → colour-name mapping for auto-registration from events
+_AGENT_TYPE_COLORS: Dict[str, str] = {
+    "research": "cyan",
+    "analysis": "yellow",
+    "critic": "magenta",
+    "synthesis": "green",
 }
 
 
@@ -110,6 +123,8 @@ class HelixVisualizer:
         self._sidebar_width = sidebar_width
         self._agents: Dict[str, AgentDisplayState] = {}
         self._frame: int = 0
+        self._event_bus: Optional[EventBus] = None
+        self._monitor: Optional[ConfidenceMonitor] = None
 
     # ------------------------------------------------------------------
     # Registration & update
@@ -174,6 +189,84 @@ class HelixVisualizer:
                 agent.phase = "synthesis"
         if status:
             agent.status = status
+
+    # ------------------------------------------------------------------
+    # Event bus integration
+    # ------------------------------------------------------------------
+
+    def attach_event_bus(self, bus: EventBus) -> None:
+        """Subscribe to agent lifecycle events for automatic display updates.
+
+        Args:
+            bus: The event bus to subscribe to.
+        """
+        self._event_bus = bus
+        bus.subscribe("agent.*", self._on_agent_event)
+        bus.subscribe("spawn.*", self._on_spawn_event)
+
+    def detach_event_bus(self) -> None:
+        """Remove event subscriptions and detach the bus."""
+        if self._event_bus is not None:
+            self._event_bus.unsubscribe("agent.*", self._on_agent_event)
+            self._event_bus.unsubscribe("spawn.*", self._on_spawn_event)
+            self._event_bus = None
+
+    def _on_agent_event(self, event: FelixEvent) -> None:
+        """Handle agent lifecycle events."""
+        agent_id = event.data.get("agent_id", "")
+        if not agent_id:
+            parts = event.source.split(":")
+            agent_id = parts[1] if len(parts) > 1 else event.source
+
+        handler = self._AGENT_EVENT_HANDLERS.get(event.event_type)
+        if handler is not None:
+            handler(self, agent_id, event)
+
+    def _handle_agent_spawned(self, agent_id: str, event: FelixEvent) -> None:
+        if agent_id not in self._agents:
+            agent_type = event.data.get("agent_type", "")
+            label = agent_type[:2].upper() or agent_id[:2].upper()
+            color = _AGENT_TYPE_COLORS.get(agent_type, "cyan")
+            self.register_agent(agent_id, label=label, color=color)
+
+    def _handle_agent_position(self, agent_id: str, event: FelixEvent) -> None:
+        if agent_id in self._agents:
+            self.update(
+                agent_id,
+                progress=event.data.get("progress", 0.0),
+                confidence=event.data.get("confidence", 0.0),
+                phase=event.data.get("phase", ""),
+            )
+
+    def _handle_agent_completed(self, agent_id: str, event: FelixEvent) -> None:
+        if agent_id in self._agents:
+            self._agents[agent_id].status = "DONE"
+
+    def _handle_agent_failed(self, agent_id: str, event: FelixEvent) -> None:
+        if agent_id in self._agents:
+            self._agents[agent_id].status = "FAILED"
+
+    _AGENT_EVENT_HANDLERS: Dict[str, Any] = {
+        EventType.AGENT_SPAWNED.value: _handle_agent_spawned,
+        EventType.AGENT_POSITION_UPDATED.value: _handle_agent_position,
+        EventType.AGENT_COMPLETED.value: _handle_agent_completed,
+        EventType.AGENT_FAILED.value: _handle_agent_failed,
+    }
+
+    def _on_spawn_event(self, event: FelixEvent) -> None:
+        """Handle dynamic spawning events (new agents picked up via AGENT_SPAWNED)."""
+
+    # ------------------------------------------------------------------
+    # Confidence monitor
+    # ------------------------------------------------------------------
+
+    def set_monitor(self, monitor: ConfidenceMonitor) -> None:
+        """Attach a confidence monitor for trend display in the footer.
+
+        Args:
+            monitor: The confidence monitor to read status from.
+        """
+        self._monitor = monitor
 
     # ------------------------------------------------------------------
     # Rendering — public
@@ -439,7 +532,24 @@ class HelixVisualizer:
             f"  Team Confidence: {colorize(conf_colour, bar)} "
             f"{colorize(BOLD + conf_colour, f'{avg_conf:.1%}')}"
         )
-        return f"{separator}\n{conf_line}"
+
+        monitor_line = ""
+        if self._monitor is not None:
+            status = self._monitor.get_status()
+            trend_icons = {"rising": "\u2191", "falling": "\u2193", "stable": "\u2192"}
+            trend_str = f"{trend_icons.get(status.trend, '?')} {status.trend}"
+            rec = status.recommendation.value.upper()
+            rec_colors = {
+                "spawn": "\033[91m",
+                "hold": PHASE_COLORS["synthesis"],
+                "prune": PHASE_COLORS["analysis"],
+            }
+            rec_color = rec_colors.get(rec.lower(), RESET)
+            monitor_line = (
+                f"\n  Trend: {trend_str}  |  Recommendation: {colorize(BOLD + rec_color, rec)}"
+            )
+
+        return f"{separator}\n{conf_line}{monitor_line}"
 
     # ------------------------------------------------------------------
     # Merge
@@ -453,3 +563,37 @@ class HelixVisualizer:
             side = sidebar[row_idx] if row_idx < len(sidebar) else ""
             lines.append(f"  {canvas_line} \u2502{side}")
         return lines
+
+
+# ---------------------------------------------------------------------------
+# Streaming integration
+# ---------------------------------------------------------------------------
+
+
+class VisualizerStreamHandler(StreamHandler):
+    """A :class:`~felix_agent_sdk.streaming.StreamHandler` that updates the
+    visualizer sidebar as tokens arrive.
+
+    Args:
+        visualizer: The visualizer instance to update.
+        agent_id: The agent whose status line should reflect stream progress.
+    """
+
+    def __init__(self, visualizer: HelixVisualizer, agent_id: str) -> None:
+        self._viz = visualizer
+        self._agent_id = agent_id
+
+    def on_token(self, event: StreamEvent) -> None:
+        """Update agent status with token count."""
+        if self._agent_id in self._viz._agents:
+            self._viz._agents[self._agent_id].status = f"streaming... {event.token_index} tokens"
+
+    def on_result(self, event: StreamEvent) -> None:
+        """Mark agent as complete."""
+        if self._agent_id in self._viz._agents:
+            self._viz._agents[self._agent_id].status = "complete"
+
+    def on_error(self, event: StreamEvent) -> None:
+        """Mark agent as errored."""
+        if self._agent_id in self._viz._agents:
+            self._viz._agents[self._agent_id].status = "ERROR"

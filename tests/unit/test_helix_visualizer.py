@@ -5,7 +5,14 @@ from __future__ import annotations
 import pytest
 
 from felix_agent_sdk.core.helix import HelixConfig
-from felix_agent_sdk.visualization import AgentDisplayState, HelixVisualizer
+from felix_agent_sdk.events import EventBus, EventType, FelixEvent
+from felix_agent_sdk.spawning import ConfidenceMonitor
+from felix_agent_sdk.streaming.types import StreamEvent, StreamEventType
+from felix_agent_sdk.visualization import (
+    AgentDisplayState,
+    HelixVisualizer,
+    VisualizerStreamHandler,
+)
 
 
 @pytest.fixture
@@ -196,3 +203,117 @@ class TestAgentDisplayState:
         assert state.confidence == 0.0
         assert state.phase == "exploration"
         assert state.status == ""
+
+
+# ------------------------------------------------------------------
+# Event bus integration
+# ------------------------------------------------------------------
+
+
+class TestEventBusIntegration:
+    def test_attach_auto_registers_on_spawn(self, viz):
+        bus = EventBus()
+        viz.attach_event_bus(bus)
+        bus.emit(
+            FelixEvent(
+                EventType.AGENT_SPAWNED,
+                "agent:test-001",
+                {"agent_id": "test-001", "agent_type": "research"},
+            )
+        )
+        assert "test-001" in viz._agents
+        assert viz._agents["test-001"].label == "RE"
+
+    def test_event_position_update(self, viz):
+        viz.register_agent("a1", "A1")
+        bus = EventBus()
+        viz.attach_event_bus(bus)
+        bus.emit(
+            FelixEvent(
+                EventType.AGENT_POSITION_UPDATED,
+                "agent:a1",
+                {"agent_id": "a1", "progress": 0.5, "confidence": 0.8},
+            )
+        )
+        assert viz._agents["a1"].progress == pytest.approx(0.5)
+        assert viz._agents["a1"].confidence == pytest.approx(0.8)
+
+    def test_event_agent_completed(self, viz):
+        viz.register_agent("a1", "A1")
+        bus = EventBus()
+        viz.attach_event_bus(bus)
+        bus.emit(
+            FelixEvent(
+                EventType.AGENT_COMPLETED,
+                "agent:a1",
+                {"agent_id": "a1"},
+            )
+        )
+        assert viz._agents["a1"].status == "DONE"
+
+
+# ------------------------------------------------------------------
+# Streaming handler
+# ------------------------------------------------------------------
+
+
+class TestVisualizerStreamHandler:
+    def test_on_token_updates_status(self, viz):
+        viz.register_agent("a1", "A1")
+        handler = VisualizerStreamHandler(viz, "a1")
+        event = StreamEvent(
+            agent_id="a1",
+            event_type=StreamEventType.TOKEN,
+            content="hello",
+            token_index=5,
+        )
+        handler.on_token(event)
+        assert "5 tokens" in viz._agents["a1"].status
+
+    def test_on_result_marks_complete(self, viz):
+        viz.register_agent("a1", "A1")
+        handler = VisualizerStreamHandler(viz, "a1")
+        event = StreamEvent(
+            agent_id="a1",
+            event_type=StreamEventType.RESULT,
+            content="done",
+            is_final=True,
+        )
+        handler.on_result(event)
+        assert viz._agents["a1"].status == "complete"
+
+    def test_on_error_marks_error(self, viz):
+        viz.register_agent("a1", "A1")
+        handler = VisualizerStreamHandler(viz, "a1")
+        event = StreamEvent(
+            agent_id="a1",
+            event_type=StreamEventType.ERROR,
+            content="fail",
+        )
+        handler.on_error(event)
+        assert viz._agents["a1"].status == "ERROR"
+
+
+# ------------------------------------------------------------------
+# Confidence monitor integration
+# ------------------------------------------------------------------
+
+
+class TestConfidenceMonitorIntegration:
+    def test_footer_with_monitor(self, viz):
+        viz.register_agent("a1", "A1")
+        viz.update("a1", 0.5, 0.7)
+        monitor = ConfidenceMonitor(threshold=0.8)
+        monitor.record_round({"a1": 0.7})
+        viz.set_monitor(monitor)
+        output = viz.render_to_string()
+        assert "Trend" in output
+        assert "Recommendation" in output
+
+    def test_footer_without_monitor(self, viz):
+        viz.register_agent("a1", "A1")
+        viz.update("a1", 0.5, 0.7)
+        output = viz.render_to_string()
+        assert "Confidence" in output
+        # Should not crash without monitor
+        assert "Trend" not in output

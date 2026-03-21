@@ -10,9 +10,11 @@ from __future__ import annotations
 from felix_agent_sdk.visualization.helix_visualizer import (
     AgentDisplayState,
     HelixVisualizer,
+    VisualizerStreamHandler,
 )
 
 __all__ = [
     "AgentDisplayState",
     "HelixVisualizer",
+    "VisualizerStreamHandler",
 ]
