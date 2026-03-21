@@ -13,12 +13,17 @@ from __future__ import annotations
 import logging
 import time
 
+from typing import Optional
+
 from felix_agent_sdk.agents.base import AgentState
 from felix_agent_sdk.agents.factory import AgentFactory
 from felix_agent_sdk.agents.llm_agent import LLMAgent, LLMResult, LLMTask
 from felix_agent_sdk.communication.central_post import CentralPost
 from felix_agent_sdk.communication.messages import MessageType
 from felix_agent_sdk.communication.spoke import SpokeManager
+from felix_agent_sdk.events.bus import EventBus
+from felix_agent_sdk.events.mixins import EventEmitterMixin
+from felix_agent_sdk.events.types import EventType
 from felix_agent_sdk.providers.base import BaseProvider
 from felix_agent_sdk.workflows.config import WorkflowConfig, WorkflowResult
 from felix_agent_sdk.workflows.context_builder import CollaborativeContextBuilder
@@ -27,7 +32,7 @@ from felix_agent_sdk.workflows.synthesizer import WorkflowSynthesizer
 logger = logging.getLogger(__name__)
 
 
-class FelixWorkflow:
+class FelixWorkflow(EventEmitterMixin):
     """Multi-agent workflow runner using helical agent progression.
 
     Orchestrates agent team creation, discrete processing rounds with
@@ -37,12 +42,20 @@ class FelixWorkflow:
     Args:
         config: Workflow configuration (team composition, thresholds, …).
         provider: LLM provider shared by all agents.
+        event_bus: Optional event bus for observability.
     """
 
-    def __init__(self, config: WorkflowConfig, provider: BaseProvider) -> None:
+    def __init__(
+        self,
+        config: WorkflowConfig,
+        provider: BaseProvider,
+        event_bus: Optional[EventBus] = None,
+    ) -> None:
         self._config = config
         self._provider = provider
         self._factory = AgentFactory(provider, helix_config=config.helix_config)
+        if event_bus is not None:
+            self.set_event_bus(event_bus)
 
     # ------------------------------------------------------------------
     # Public API
@@ -66,11 +79,21 @@ class FelixWorkflow:
         start = time.monotonic()
 
         # --- Setup ---
-        hub = CentralPost(max_agents=self._config.max_agents)
+        hub = CentralPost(max_agents=self._config.max_agents, event_bus=self._event_bus)
         spoke_mgr = SpokeManager(hub=hub)
         agents = self._create_team(spoke_mgr)
         builder = CollaborativeContextBuilder()
         all_results: list[LLMResult] = []
+
+        self.emit_event(
+            EventType.WORKFLOW_STARTED,
+            {
+                "task": task_description,
+                "max_rounds": self._config.max_rounds,
+                "agents_count": len(agents),
+                "team_composition": [(a.agent_type, a.agent_id) for a in agents],
+            },
+        )
 
         try:
             # --- Processing rounds ---
@@ -80,6 +103,13 @@ class FelixWorkflow:
 
             for round_num in range(self._config.max_rounds):
                 current_time = (round_num + 1) * time_step
+                rounds_completed = round_num + 1
+
+                self.emit_event(
+                    EventType.WORKFLOW_ROUND_STARTED,
+                    {"round": rounds_completed, "current_time": round(current_time, 4)},
+                )
+
                 round_results = self._run_round(
                     agents=agents,
                     spoke_mgr=spoke_mgr,
@@ -89,24 +119,39 @@ class FelixWorkflow:
                     current_time=current_time,
                 )
                 all_results.extend(round_results)
-                rounds_completed = round_num + 1
+
+                avg_confidence = 0.0
+                if round_results:
+                    avg_confidence = sum(r.confidence for r in round_results) / len(round_results)
+
+                self.emit_event(
+                    EventType.WORKFLOW_ROUND_COMPLETED,
+                    {
+                        "round": rounds_completed,
+                        "results_count": len(round_results),
+                        "avg_confidence": round(avg_confidence, 4),
+                    },
+                )
 
                 # Dynamic spawning hook (no-op for now)
                 self._check_dynamic_spawning(agents, round_results)
 
                 # Convergence check
-                if round_results:
-                    avg_confidence = sum(r.confidence for r in round_results) / len(round_results)
-                    if avg_confidence >= self._config.confidence_threshold:
-                        logger.info(
-                            "Workflow converged at round %d (confidence=%.3f)",
-                            rounds_completed,
-                            avg_confidence,
-                        )
-                        converged = True
-                        break
+                if round_results and avg_confidence >= self._config.confidence_threshold:
+                    logger.info(
+                        "Workflow converged at round %d (confidence=%.3f)",
+                        rounds_completed,
+                        avg_confidence,
+                    )
+                    self.emit_event(
+                        EventType.WORKFLOW_CONVERGED,
+                        {"round": rounds_completed, "confidence": round(avg_confidence, 4)},
+                    )
+                    converged = True
+                    break
 
             # --- Synthesis ---
+            self.emit_event(EventType.WORKFLOW_SYNTHESIS_STARTED, {})
             synthesizer = WorkflowSynthesizer(self._provider, self._config)
             synthesis = synthesizer.synthesize(all_results, task_description)
 
@@ -118,7 +163,7 @@ class FelixWorkflow:
             elapsed = time.monotonic() - start
             total_tokens = sum(r.token_budget_used for r in all_results)
 
-            return WorkflowResult(
+            result = WorkflowResult(
                 synthesis=synthesis,
                 agent_results=all_results,
                 total_rounds=rounds_completed,
@@ -131,6 +176,19 @@ class FelixWorkflow:
                     "team_composition": [(a.agent_type, a.agent_id) for a in agents],
                 },
             )
+
+            self.emit_event(
+                EventType.WORKFLOW_COMPLETED,
+                {
+                    "rounds": rounds_completed,
+                    "converged": converged,
+                    "final_confidence": round(final_confidence, 4),
+                    "total_tokens": total_tokens,
+                    "elapsed_seconds": round(elapsed, 3),
+                },
+            )
+
+            return result
         finally:
             spoke_mgr.shutdown_all()
             hub.shutdown()
@@ -152,6 +210,9 @@ class FelixWorkflow:
                 spawn_time=spawn_time,
                 **kwargs,
             )
+            # Propagate event bus to each agent
+            if self._event_bus is not None:
+                agent.set_event_bus(self._event_bus)
             spoke_mgr.create_spoke(agent.agent_id, agent=agent)
             agents.append(agent)
 
@@ -246,10 +307,11 @@ def run_felix_workflow(
     provider: BaseProvider,
     task_description: str,
     context: str = "",
+    event_bus: Optional[EventBus] = None,
 ) -> WorkflowResult:
     """Run a Felix workflow in one call.
 
     Thin wrapper around :class:`FelixWorkflow` for simple use cases.
     """
-    workflow = FelixWorkflow(config, provider)
+    workflow = FelixWorkflow(config, provider, event_bus=event_bus)
     return workflow.run(task_description, context=context)

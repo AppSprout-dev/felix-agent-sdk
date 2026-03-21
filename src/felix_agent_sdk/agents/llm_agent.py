@@ -19,6 +19,9 @@ from typing import Any, ClassVar, Dict, List, Optional, Tuple
 
 from felix_agent_sdk.agents.base import Agent
 from felix_agent_sdk.core.helix import HelixGeometry
+from felix_agent_sdk.events.bus import EventBus
+from felix_agent_sdk.events.mixins import EventEmitterMixin
+from felix_agent_sdk.events.types import EventType
 from felix_agent_sdk.providers.base import BaseProvider
 from felix_agent_sdk.providers.types import ChatMessage, CompletionResult, MessageRole
 from felix_agent_sdk.tokens.budget import TokenBudget
@@ -76,7 +79,7 @@ _DEFAULT_TEMP_RANGE: Tuple[float, float] = (0.1, 0.9)
 # ---------------------------------------------------------------------------
 
 
-class LLMAgent(Agent):
+class LLMAgent(Agent, EventEmitterMixin):
     """LLM-powered agent that processes tasks via a provider-agnostic interface.
 
     Extends :class:`Agent` with LLM capabilities: adaptive temperature,
@@ -98,11 +101,14 @@ class LLMAgent(Agent):
         temperature_range: Optional[Tuple[float, float]] = None,
         max_tokens: Optional[int] = None,
         token_budget: Optional[TokenBudget] = None,
+        event_bus: Optional[EventBus] = None,
     ) -> None:
         super().__init__(agent_id, helix, spawn_time=spawn_time, velocity=velocity)
 
         self.provider = provider
         self.agent_type = agent_type
+        if event_bus is not None:
+            self.set_event_bus(event_bus)
 
         self.temperature_range = temperature_range or _DEFAULT_TEMPERATURE_RANGES.get(
             agent_type, _DEFAULT_TEMP_RANGE
@@ -308,11 +314,17 @@ class LLMAgent(Agent):
     # ------------------------------------------------------------------
 
     def process_task(self, task: LLMTask) -> LLMResult:
-        """Process a task: prompt ➜ provider call ➜ confidence ➜ result.
+        """Process a task: prompt -> provider call -> confidence -> result.
 
         This is the primary entry point for running an agent on a task.
         """
         start = time.monotonic()
+
+        self.emit_event(
+            EventType.TASK_STARTED,
+            {"task_id": task.task_id, "agent_type": self.agent_type},
+            source=f"agent:{self.agent_id}",
+        )
 
         temperature = self.get_adaptive_temperature()
         system_prompt, user_prompt = self.create_position_aware_prompt(task)
@@ -339,6 +351,21 @@ class LLMAgent(Agent):
             token_budget_used=completion.total_tokens,
         )
         self.processing_results.append(result)
+
+        self.emit_event(
+            EventType.TASK_COMPLETED,
+            {
+                "task_id": task.task_id,
+                "agent_type": self.agent_type,
+                "confidence": round(confidence, 4),
+                "temperature": round(temperature, 4),
+                "tokens": completion.total_tokens,
+                "processing_time": round(elapsed, 4),
+                "phase": result.position_info.get("phase", ""),
+            },
+            source=f"agent:{self.agent_id}",
+        )
+
         return result
 
     # ------------------------------------------------------------------
