@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from felix_agent_sdk.core.helix import HelixConfig
@@ -103,11 +101,7 @@ class TestRender:
         viz.register_agent("rm", "RM")
         viz.update("rm", 0.5, 0.5)
         output = viz.render_to_string()
-        assert (
-            "EXPLORATION" in output
-            or "ANALYSIS" in output
-            or "SYNTHESIS" in output
-        )
+        assert "EXPLORATION" in output or "ANALYSIS" in output or "SYNTHESIS" in output
 
     def test_render_header_info(self, viz):
         viz.register_agent("rm", "RM")
@@ -197,9 +191,7 @@ class TestDimensions:
 
 class TestAgentDisplayState:
     def test_defaults(self):
-        state = AgentDisplayState(
-            agent_id="test", label="TT", color="\033[96m"
-        )
+        state = AgentDisplayState(agent_id="test", label="TT", color="\033[96m")
         assert state.progress == 0.0
         assert state.confidence == 0.0
         assert state.phase == "exploration"

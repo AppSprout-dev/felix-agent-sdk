@@ -206,9 +206,7 @@ class HelixVisualizer:
             extra_info: Arbitrary key-value pairs shown in the header.
         """
         sys.stdout.write(clear_screen())
-        sys.stdout.write(
-            self.render_to_string(tick=tick, day=day, extra_info=extra_info)
-        )
+        sys.stdout.write(self.render_to_string(tick=tick, day=day, extra_info=extra_info))
         sys.stdout.flush()
 
     def render_to_string(
@@ -310,13 +308,9 @@ class HelixVisualizer:
 
         for col in range(self._width):
             if canvas[explore_row][col].strip() == "":
-                canvas[explore_row][col] = colorize(
-                    DIM + PHASE_COLORS["exploration"], "-"
-                )
+                canvas[explore_row][col] = colorize(DIM + PHASE_COLORS["exploration"], "-")
             if canvas[analysis_row][col].strip() == "":
-                canvas[analysis_row][col] = colorize(
-                    DIM + PHASE_COLORS["analysis"], "-"
-                )
+                canvas[analysis_row][col] = colorize(DIM + PHASE_COLORS["analysis"], "-")
 
         # Phase labels centred on the boundary rows
         explore_label = " EXPLORATION "
@@ -327,20 +321,14 @@ class HelixVisualizer:
         for i, ch in enumerate(explore_label):
             c = e_start + i
             if 0 <= c < self._width:
-                canvas[explore_row][c] = colorize(
-                    BOLD + PHASE_COLORS["exploration"], ch
-                )
+                canvas[explore_row][c] = colorize(BOLD + PHASE_COLORS["exploration"], ch)
 
         for i, ch in enumerate(analysis_label):
             c = a_start + i
             if 0 <= c < self._width:
-                canvas[analysis_row][c] = colorize(
-                    BOLD + PHASE_COLORS["analysis"], ch
-                )
+                canvas[analysis_row][c] = colorize(BOLD + PHASE_COLORS["analysis"], ch)
 
-    def _place_agent(
-        self, canvas: List[List[str]], agent: AgentDisplayState
-    ) -> None:
+    def _place_agent(self, canvas: List[List[str]], agent: AgentDisplayState) -> None:
         """Place an agent label on the canvas at its helix position."""
         t = agent.progress
         row = int(t * (self._height - 1))
@@ -396,9 +384,7 @@ class HelixVisualizer:
             # Confidence + phase
             conf_str = f"conf:{agent.confidence:.2f}"
             phase_str = agent.phase[:5].upper()
-            lines.append(
-                f"   {conf_str}  {colorize(phase_colour, phase_str)}"
-            )
+            lines.append(f"   {conf_str}  {colorize(phase_colour, phase_str)}")
 
             # Optional status line
             if agent.status:
@@ -451,9 +437,7 @@ class HelixVisualizer:
         """Build the footer with team confidence bar."""
         separator = "  " + "\u2550" * (self._width + self._sidebar_width + 3)
 
-        avg_conf = (
-            sum(a.confidence for a in agents) / len(agents) if agents else 0.0
-        )
+        avg_conf = sum(a.confidence for a in agents) / len(agents) if agents else 0.0
         bar = progress_bar(avg_conf, 30)
 
         if avg_conf >= 0.75:
@@ -473,9 +457,7 @@ class HelixVisualizer:
     # Merge
     # ------------------------------------------------------------------
 
-    def _merge(
-        self, canvas: List[List[str]], sidebar: List[str]
-    ) -> List[str]:
+    def _merge(self, canvas: List[List[str]], sidebar: List[str]) -> List[str]:
         """Merge the helix canvas rows with the sidebar rows."""
         lines: List[str] = []
         for row_idx in range(self._height):
