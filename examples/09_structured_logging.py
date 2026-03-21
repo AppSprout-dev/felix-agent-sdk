@@ -16,9 +16,9 @@ from felix_agent_sdk.utils.logging import EventLogBridge, FelixLogConfig
 
 
 def main():
-    # Configure JSON logging at DEBUG level
+    # Configure JSON logging at INFO level (use DEBUG for more detail)
     configure_logging(FelixLogConfig(
-        level="DEBUG",
+        level="INFO",
         format="json",
     ))
 

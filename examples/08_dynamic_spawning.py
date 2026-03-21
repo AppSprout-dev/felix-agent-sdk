@@ -20,8 +20,8 @@ def main():
     # Watch for spawn events
     def on_spawn(event):
         print(f"  >>> SPAWN: {event.data.get('agent_type', '?')} "
-              f"agent {event.data.get('agent_id', '?')} "
-              f"(reason: {event.data.get('reason', '?')})")
+              f"(reason: {event.data.get('reason', '?')}, "
+              f"gap: {event.data.get('gap', '?')})")
 
     def on_spawn_done(event):
         print(f"  >>> SPAWNED: {event.data.get('agent_id', '?')} "

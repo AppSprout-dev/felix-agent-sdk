@@ -25,11 +25,20 @@ def main():
         conf = event.data.get("confidence", "?")
         print(f"  [TASK]  {event.source} ({agent}) confidence={conf}")
 
-    bus.subscribe(EventType.WORKFLOW_STARTED, lambda e: print(f">>> Workflow started: {e.data['task'][:60]}"))
+    def on_started(event):
+        print(f">>> Workflow started: {event.data['task'][:60]}")
+
+    def on_converged(event):
+        print(f">>> Converged at round {event.data['round']}!")
+
+    def on_completed(event):
+        print(f">>> Workflow done in {event.data['elapsed_seconds']}s")
+
+    bus.subscribe(EventType.WORKFLOW_STARTED, on_started)
     bus.subscribe("workflow.round.*", on_round)
     bus.subscribe(EventType.TASK_COMPLETED, on_task)
-    bus.subscribe(EventType.WORKFLOW_CONVERGED, lambda e: print(f">>> Converged at round {e.data['round']}!"))
-    bus.subscribe(EventType.WORKFLOW_COMPLETED, lambda e: print(f">>> Workflow done in {e.data['elapsed_seconds']}s"))
+    bus.subscribe(EventType.WORKFLOW_CONVERGED, on_converged)
+    bus.subscribe(EventType.WORKFLOW_COMPLETED, on_completed)
 
     provider = make_mock_provider()
     config = WorkflowConfig(max_rounds=2)
