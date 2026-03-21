@@ -282,9 +282,9 @@ provider = auto_detect_provider()  # Reads from environment
 
 ## Roadmap
 
-**Phase 1 — Core SDK (Current):** Pip-installable package with provider abstraction, core primitives, and documentation.
+**Phase 1 — Core SDK (v0.1.0):** Pip-installable package with provider abstraction, core primitives, and documentation.
 
-**Phase 2 — Developer Experience:** CLI tooling, helix visualization dashboard, structured logging, expanded examples.
+**Phase 2 — Developer Experience (v0.2.0, Current):** Event system, structured logging, streaming, dynamic spawning, CLI tooling (`felix init`, `felix run`), expanded examples.
 
 **Phase 3 — Community & Ecosystem:** MCP server integration, vector database connectors, observability adapters, community contribution framework.
 

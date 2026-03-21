@@ -2,6 +2,57 @@
 
 All notable changes to Felix Agent SDK will be documented in this file.
 
+## [0.2.0] — 2026-03-21
+
+Phase 2: Developer Experience. Zero breaking changes to v0.1.0 API.
+
+### Event System
+- `EventBus` — synchronous pub/sub with exact, prefix (`"agent.*"`), and catch-all subscriptions
+- `FelixEvent` — frozen dataclass with event_type, source, data, timestamp
+- `EventType` — enum covering agent, workflow, task, message, stream, and spawn events
+- `EventEmitterMixin` — opt-in mixin for event emission from any component
+- Wired into `FelixWorkflow`, `LLMAgent`, and `CentralPost`
+
+### Structured Logging
+- `configure_logging()` — one-call setup for all `felix_agent_sdk.*` loggers
+- `FelixLogConfig` — text or JSON format, per-subsystem level overrides
+- `JSONFormatter` — structured JSON output with event metadata fields
+- `EventLogBridge` — subscribes to EventBus and auto-logs events
+
+### Streaming
+- `StreamEvent` / `StreamEventType` — token-level streaming events
+- `StreamHandler`, `CallbackStreamHandler`, `EventBusStreamHandler`
+- `StreamAccumulator` — bridges provider `stream()` to SDK `StreamEvent`
+- `LLMAgent.process_task_streaming()` — full streaming with same lifecycle as `process_task()`
+
+### Dynamic Spawning
+- `ConfidenceMonitor` — per-agent/team confidence tracking, stagnation detection
+- `ContentAnalyzer` — keyword-based topic coverage gap analysis
+- `TeamSizeOptimizer` — heuristic team size recommendations
+- `DynamicSpawner` — orchestrates monitor + analyzer, emits spawn events
+- `WorkflowConfig.enable_dynamic_spawning` and `max_dynamic_agents` fields
+- Wired into `FelixWorkflow` round loop
+
+### CLI
+- `felix init <name> [--template]` — scaffold projects (research, analysis, review templates)
+- `felix run <config.yaml> [--provider] [--verbose]` — run workflows from YAML
+- `felix version` — print SDK version
+- YAML config loader with helix presets, team composition, all config fields
+
+### Examples
+- `06_event_system.py` — event subscriptions and workflow timeline
+- `07_streaming_output.py` — token-level streaming demo
+- `08_dynamic_spawning.py` — confidence-driven agent creation
+- `09_structured_logging.py` — JSON and text log output
+- `10_yaml_workflow/` — CLI workflow from YAML config
+
+### Infrastructure
+- Shared `STOPWORDS` extracted to `utils/text.py` (deduplicated from 3 modules)
+- EventBus history capped at 10,000 events (configurable)
+- 792+ tests, Python 3.10-3.12
+
+---
+
 ## [0.1.0] — 2026-03-19
 
 Initial public release of the Felix Agent SDK.
