@@ -24,6 +24,8 @@ from felix_agent_sdk.events.mixins import EventEmitterMixin
 from felix_agent_sdk.events.types import EventType
 from felix_agent_sdk.providers.base import BaseProvider
 from felix_agent_sdk.providers.types import ChatMessage, CompletionResult, MessageRole
+from felix_agent_sdk.streaming.accumulator import StreamAccumulator
+from felix_agent_sdk.streaming.handler import StreamHandler
 from felix_agent_sdk.tokens.budget import TokenBudget
 
 logger = logging.getLogger(__name__)
@@ -361,6 +363,88 @@ class LLMAgent(Agent, EventEmitterMixin):
                 "tokens": completion.total_tokens,
                 "processing_time": round(elapsed, 4),
                 "phase": result.position_info.get("phase", ""),
+            },
+            source=f"agent:{self.agent_id}",
+        )
+
+        return result
+
+    def process_task_streaming(
+        self, task: LLMTask, handler: StreamHandler
+    ) -> LLMResult:
+        """Process a task with token-level streaming.
+
+        Same lifecycle as :meth:`process_task` (prompt -> provider ->
+        confidence -> result) but uses ``provider.stream()`` and
+        dispatches each chunk through *handler*.
+
+        Args:
+            task: The task to process.
+            handler: Stream handler to receive token events.
+
+        Returns:
+            :class:`LLMResult` identical to what ``process_task`` would
+            return for the same content.
+        """
+        start = time.monotonic()
+
+        self.emit_event(
+            EventType.TASK_STARTED,
+            {"task_id": task.task_id, "agent_type": self.agent_type, "streaming": True},
+            source=f"agent:{self.agent_id}",
+        )
+
+        temperature = self.get_adaptive_temperature()
+        system_prompt, user_prompt = self.create_position_aware_prompt(task)
+        max_tokens = self.max_tokens
+
+        messages = [
+            ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
+            ChatMessage(role=MessageRole.USER, content=user_prompt),
+        ]
+
+        accumulator = StreamAccumulator(
+            agent_id=self.agent_id,
+            handler=handler,
+            model=getattr(self.provider, "model", ""),
+        )
+        chunks = self.provider.stream(
+            messages, temperature=temperature, max_tokens=max_tokens
+        )
+        accumulator.feed_all(chunks)
+        completion = accumulator.to_completion_result()
+
+        confidence = self.calculate_confidence(completion.content)
+        self.record_confidence(confidence)
+
+        elapsed = time.monotonic() - start
+        self.total_tokens_used += completion.total_tokens
+        self.total_processing_time += elapsed
+
+        result = LLMResult(
+            agent_id=self.agent_id,
+            task_id=task.task_id,
+            content=completion.content,
+            position_info=self.get_position_info(),
+            completion_result=completion,
+            processing_time=elapsed,
+            confidence=confidence,
+            temperature_used=temperature,
+            token_budget_used=completion.total_tokens,
+        )
+        self.processing_results.append(result)
+
+        self.emit_event(
+            EventType.TASK_COMPLETED,
+            {
+                "task_id": task.task_id,
+                "agent_type": self.agent_type,
+                "confidence": round(confidence, 4),
+                "temperature": round(temperature, 4),
+                "tokens": completion.total_tokens,
+                "processing_time": round(elapsed, 4),
+                "phase": result.position_info.get("phase", ""),
+                "streaming": True,
             },
             source=f"agent:{self.agent_id}",
         )
