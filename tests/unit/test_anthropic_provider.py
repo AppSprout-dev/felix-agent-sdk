@@ -281,6 +281,55 @@ class TestAnthropicComplete:
 
 
 # ---------------------------------------------------------------------------
+# Sampling-parameter gating (Fable / Opus 4.7+)
+# ---------------------------------------------------------------------------
+
+
+class TestSamplingParamGating:
+    @pytest.mark.parametrize(
+        "model",
+        ["claude-fable-5", "claude-opus-4-7", "claude-opus-4-8"],
+    )
+    def test_temperature_omitted_for_no_sampling_models(self, user_message, model):
+        p = _make_provider(model=model)
+        p._client.messages.create.return_value = _mock_response()
+        p.complete([user_message], temperature=0.5)
+
+        call_kwargs = p._client.messages.create.call_args[1]
+        assert "temperature" not in call_kwargs
+
+    def test_temperature_still_sent_for_sonnet(self, user_message):
+        p = _make_provider(model="claude-sonnet-4-6")
+        p._client.messages.create.return_value = _mock_response()
+        p.complete([user_message], temperature=0.5)
+
+        call_kwargs = p._client.messages.create.call_args[1]
+        assert call_kwargs["temperature"] == 0.5
+
+    def test_temperature_still_sent_for_opus_4_6(self, user_message):
+        p = _make_provider(model="claude-opus-4-6")
+        p._client.messages.create.return_value = _mock_response()
+        p.complete([user_message])
+
+        call_kwargs = p._client.messages.create.call_args[1]
+        assert call_kwargs["temperature"] == p.config.default_temperature
+
+    def test_stream_omits_temperature_for_fable(self, user_message):
+        p = _make_provider(model="claude-fable-5")
+
+        mock_stream = MagicMock()
+        mock_stream.text_stream = iter([])
+        mock_stream.get_final_message.return_value = _mock_response()
+        mock_stream.__enter__ = MagicMock(return_value=mock_stream)
+        mock_stream.__exit__ = MagicMock(return_value=False)
+        p._client.messages.stream.return_value = mock_stream
+
+        list(p.stream([user_message], temperature=0.5))
+        call_kwargs = p._client.messages.stream.call_args[1]
+        assert "temperature" not in call_kwargs
+
+
+# ---------------------------------------------------------------------------
 # stream()
 # ---------------------------------------------------------------------------
 
@@ -444,6 +493,15 @@ class TestAnthropicTranslateError:
         assert isinstance(result, ProviderError)
         assert not isinstance(result, AuthenticationError)
         assert result.provider == "anthropic"
+
+    def test_param_rejection_400_not_misread_as_model_not_found(self):
+        p = _make_provider()
+        err = Exception(
+            "Error code: 400 - `temperature` is not supported on this model"
+        )
+        result = p._translate_error(err)
+        assert isinstance(result, ProviderError)
+        assert not isinstance(result, ModelNotFoundError)
 
 
 # ---------------------------------------------------------------------------

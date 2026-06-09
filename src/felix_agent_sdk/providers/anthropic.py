@@ -24,13 +24,24 @@ class AnthropicProvider(BaseProvider):
 
     Requires: pip install felix-agent-sdk[anthropic]
 
-    Supported models: claude-opus-4-5, claude-sonnet-4-5, claude-haiku-4-5,
-    and all previous Claude model versions.
+    Supported models: claude-fable-5, claude-opus-4-8, claude-sonnet-4-6,
+    claude-haiku-4-5, and all previous Claude model versions.
+
+    Note: Fable-class and Opus 4.7+ models reject sampling parameters
+    (temperature/top_p/top_k) with HTTP 400; for those models the provider
+    omits temperature entirely and helix temperature adaptation has no effect.
 
     Configuration:
         - api_key: Set via constructor or ANTHROPIC_API_KEY env var.
         - base_url: Defaults to Anthropic's API. Override for proxies.
     """
+
+    # Model families that reject sampling parameters with HTTP 400.
+    _SAMPLING_UNSUPPORTED_PREFIXES = (
+        "claude-fable",
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+    )
 
     def __init__(
         self,
@@ -67,6 +78,10 @@ class AnthropicProvider(BaseProvider):
             self._client = anthropic.Anthropic(**client_kwargs)
         return self._client
 
+    def _supports_sampling_params(self) -> bool:
+        """Whether the configured model accepts temperature/top_p/top_k."""
+        return not self.config.model.startswith(self._SAMPLING_UNSUPPORTED_PREFIXES)
+
     def _format_messages(self, messages: Sequence[ChatMessage]):
         """Convert ChatMessages to Anthropic's format.
 
@@ -100,9 +115,10 @@ class AnthropicProvider(BaseProvider):
         create_kwargs: Dict[str, Any] = {
             "model": self.config.model,
             "messages": api_messages,
-            "temperature": self._resolve_temperature(temperature),
             "max_tokens": self._resolve_max_tokens(max_tokens),
         }
+        if self._supports_sampling_params():
+            create_kwargs["temperature"] = self._resolve_temperature(temperature)
         if system_content:
             create_kwargs["system"] = system_content
         if stop_sequences:
@@ -143,9 +159,10 @@ class AnthropicProvider(BaseProvider):
         create_kwargs: Dict[str, Any] = {
             "model": self.config.model,
             "messages": api_messages,
-            "temperature": self._resolve_temperature(temperature),
             "max_tokens": self._resolve_max_tokens(max_tokens),
         }
+        if self._supports_sampling_params():
+            create_kwargs["temperature"] = self._resolve_temperature(temperature)
         if system_content:
             create_kwargs["system"] = system_content
         if stop_sequences:
@@ -192,15 +209,24 @@ class AnthropicProvider(BaseProvider):
         """Translate Anthropic-specific exceptions to Felix provider errors."""
         error_str = str(error)
         error_type = type(error).__name__
+        lowered = error_str.lower()
 
-        if "authentication" in error_str.lower() or "api_key" in error_str.lower():
+        if "authentication" in lowered or "api_key" in lowered:
             return AuthenticationError(error_str, provider="anthropic")
         if "rate_limit" in error_type.lower() or "429" in error_str:
             return RateLimitError(error_str, provider="anthropic")
-        if "not_found" in error_type.lower() or "model" in error_str.lower():
-            return ModelNotFoundError(error_str, provider="anthropic")
-        if "context" in error_str.lower() or "too long" in error_str.lower():
+        if "context" in lowered or "too long" in lowered:
             return ContextLengthError(error_str, provider="anthropic")
+        # Bare "model" in the message is not enough: param-rejection 400s
+        # ("temperature is not supported on this model") must stay generic.
+        if "notfound" in error_type.lower().replace("_", "") or (
+            "model" in lowered
+            and any(
+                phrase in lowered
+                for phrase in ("not exist", "not found", "not available", "unknown")
+            )
+        ):
+            return ModelNotFoundError(error_str, provider="anthropic")
         return ProviderError(error_str, provider="anthropic")
 
 
