@@ -2,6 +2,15 @@
 
 All notable changes to Felix Agent SDK will be documented in this file.
 
+## [0.2.2] — 2026-06-09
+
+### Fixed
+- `AnthropicProvider`: omit sampling params for Claude Fable 5 / Opus 4.7+ (these
+  models reject `temperature`/`top_p`/`top_k` with HTTP 400).
+- Param-rejection errors are no longer misreported as `ModelNotFoundError`.
+
+---
+
 ## [0.2.0] — 2026-03-21
 
 Phase 2: Developer Experience. Zero breaking changes to v0.1.0 API.
