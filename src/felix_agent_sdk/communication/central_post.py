@@ -69,7 +69,7 @@ class CentralPost:
 
     Architecture:
         - Sync ``Queue`` for single-threaded / test usage.
-        - Async ``asyncio.Queue`` (lazy-initialised) for async runtimes.
+        - Async ``asyncio.Queue`` (created eagerly at construction) for async runtimes.
         - ``AgentRegistry`` tracks helix positions, phases, and confidence.
         - Lifecycle callbacks notify callers when agents spawn/complete/fail.
 
@@ -81,6 +81,7 @@ class CentralPost:
         message_history_limit: Maximum number of processed messages retained
             for :meth:`get_recent_messages`. Older messages are discarded
             (the ``total_messages_processed`` counter is unaffected).
+            Pass ``None`` for unbounded history (pre-0.3.0 behavior).
     """
 
     def __init__(
@@ -89,7 +90,7 @@ class CentralPost:
         enable_metrics: bool = False,
         provider: Optional[BaseProvider] = None,
         event_bus: Optional[EventBus] = None,
-        message_history_limit: int = 1000,
+        message_history_limit: Optional[int] = 1000,
     ) -> None:
         self._max_agents = max_agents
         self._enable_metrics = enable_metrics

@@ -69,6 +69,7 @@ class SQLiteBackend(BaseBackend):
         self._fts_text_cols: dict[str, list[str]] = {}
         self._initialized_tables: set[str] = set()
         self._table_columns: dict[str, set[str]] = {}
+        self._disk_columns: dict[str, set[str]] = {}
 
     def __enter__(self) -> SQLiteBackend:
         return self
@@ -128,6 +129,7 @@ class SQLiteBackend(BaseBackend):
         self._conn.commit()
         self._initialized_tables.add(table)
         self._table_columns[table] = {"_id"} | set(schema.keys())
+        self._disk_columns.pop(table, None)
 
     # ------------------------------------------------------------------
     # CRUD
@@ -210,7 +212,7 @@ class SQLiteBackend(BaseBackend):
 
         if order_by:
             _validate_identifier(order_by, "order_by")
-            known_cols = self._table_columns.get(table)
+            known_cols = self._all_columns(table)
             if known_cols and order_by not in known_cols:
                 raise ValueError(
                     f"Unknown order_by column {order_by!r} for table {table!r}"
@@ -262,6 +264,21 @@ class SQLiteBackend(BaseBackend):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _all_columns(self, table: str) -> set[str]:
+        """All known columns for *table*: session schema plus on-disk columns.
+
+        The on-disk lookup (PRAGMA table_info) covers tables created
+        out-of-band or with a wider schema than this session declared.
+        Results are cached per table.
+        """
+        cached = self._disk_columns.get(table)
+        if cached is None:
+            with self._lock:
+                cur = self._conn.execute(f"PRAGMA table_info([{table}])")
+                cached = {row[1] for row in cur.fetchall()}
+            self._disk_columns[table] = cached
+        return self._table_columns.get(table, set()) | cached
 
     @staticmethod
     def _map_type(hint: str) -> str:

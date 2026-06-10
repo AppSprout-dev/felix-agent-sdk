@@ -399,7 +399,15 @@ class KnowledgeStore:
         relationship_type: str = "related",
         confidence: float = 0.7,
     ) -> bool:
-        """Create a relationship between two entries."""
+        """Create a relationship between two entries.
+
+        Returns False (without storing anything) if either entry does not
+        exist or is soft-deleted — otherwise the relationship would be
+        stored but permanently invisible to :meth:`get_relationships`.
+        """
+        if not self._is_active_entry(source_id) or not self._is_active_entry(target_id):
+            return False
+
         rel_id = hashlib.sha256(
             f"{source_id}:{target_id}:{relationship_type}".encode()
         ).hexdigest()[:16]

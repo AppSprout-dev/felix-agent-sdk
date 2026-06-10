@@ -11,9 +11,9 @@ Phase 3: Hardening & Async. Driven by a full-repo code review.
   `LocalProvider` now implement `acomplete()` and `astream()` using the
   vendor SDKs' async clients.
 - `Agent.set_progress()` — public API to place an agent at a specific helix
-  position (replaces orchestrators poking `_progress`).
-- `CentralPost(message_history_limit=...)` — processed-message history is
-  now bounded (default 1000); previously it grew without limit.
+  position (replaces orchestrators poking `_progress`). Placing at `t=1.0`
+  transitions the agent to `COMPLETED`, making the placement stable across
+  subsequent position updates.
 - `HubCapacityError` (subclass of `RuntimeError`), exported from
   `felix_agent_sdk` and `felix_agent_sdk.communication`.
 - `extract_status_code()` / `extract_retry_after()` helpers in
@@ -26,6 +26,12 @@ Phase 3: Hardening & Async. Driven by a full-repo code review.
 - **Breaking**: `CentralPost.register_agent()` raises `HubCapacityError` at
   capacity instead of returning `None`, matching `register_agent_id()`
   (which now raises the same subclass — `except RuntimeError` still works).
+- **Behavior**: `CentralPost` processed-message history is now bounded
+  (`message_history_limit=1000` by default); previously it grew without
+  limit. Pass `message_history_limit=None` to restore unbounded history.
+- `KnowledgeStore.add_relationship()` returns `False` instead of storing a
+  relationship when either entry is missing or soft-deleted (such
+  relationships were invisible to `get_relationships()` anyway).
 - `HelixGeometry`/`HelixConfig` `turns` is typed `float` (fractional turns
   are geometrically valid and the YAML loader already produced floats).
 - `LLMAgent.get_position_info()` now includes `agent_type`.

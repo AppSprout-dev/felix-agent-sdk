@@ -25,6 +25,8 @@ from felix_agent_sdk.providers.errors import (
     ModelNotFoundError,
     ProviderError,
     RateLimitError,
+    extract_retry_after,
+    extract_status_code,
 )
 from felix_agent_sdk.providers.base import BaseProvider
 from felix_agent_sdk.providers.anthropic import AnthropicProvider
@@ -53,4 +55,6 @@ __all__ = [
     "RateLimitError",
     "ModelNotFoundError",
     "ContextLengthError",
+    "extract_status_code",
+    "extract_retry_after",
 ]

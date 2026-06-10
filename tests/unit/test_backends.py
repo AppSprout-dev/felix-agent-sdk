@@ -229,3 +229,25 @@ class TestSQLiteBackendClose:
         b2.initialize("t", {"x": "TEXT"})
         assert b2.get("t", "1")["x"] == "v"
         b2.close()
+
+
+class TestOrderByOnDiskColumns:
+    def test_order_by_allows_columns_outside_session_schema(self, tmp_path):
+        """Schema evolution: a column present on disk but absent from this
+        session's (narrower) initialize() schema is a valid order_by."""
+        db = str(tmp_path / "evolve.db")
+        with SQLiteBackend(db_path=db) as b1:
+            b1.initialize("t", {"name": "TEXT", "extra_col": "TEXT"})
+            b1.store("t", "1", {"name": "a", "extra_col": "x"})
+
+        with SQLiteBackend(db_path=db) as b2:
+            b2.initialize("t", {"name": "TEXT"})
+            rows = b2.query("t", order_by="extra_col")
+            assert len(rows) == 1
+
+    def test_order_by_unknown_column_still_rejected(self, tmp_path):
+        db = str(tmp_path / "evolve2.db")
+        with SQLiteBackend(db_path=db) as b:
+            b.initialize("t", {"name": "TEXT"})
+            with pytest.raises(ValueError, match="Unknown order_by"):
+                b.query("t", order_by="never_existed")

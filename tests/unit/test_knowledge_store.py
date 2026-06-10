@@ -311,3 +311,25 @@ class TestKnowledgeStoreUtilities:
     def test_semantic_search_not_implemented(self, knowledge_store):
         with pytest.raises(NotImplementedError):
             knowledge_store.semantic_search([0.1, 0.2, 0.3])
+
+
+class TestRelationshipValidation:
+    def test_add_relationship_rejects_unknown_target(self, knowledge_store):
+        kid = knowledge_store.add_entry(
+            KnowledgeType.AGENT_INSIGHT, {"x": 1},
+            ConfidenceLevel.HIGH, "a", "d",
+        )
+        assert knowledge_store.add_relationship(kid, "nonexistent-id") is False
+        assert knowledge_store.get_relationships(kid) == []
+
+    def test_add_relationship_rejects_deleted_entry(self, knowledge_store):
+        kid1 = knowledge_store.add_entry(
+            KnowledgeType.AGENT_INSIGHT, {"x": 1},
+            ConfidenceLevel.HIGH, "a", "d",
+        )
+        kid2 = knowledge_store.add_entry(
+            KnowledgeType.AGENT_INSIGHT, {"x": 2},
+            ConfidenceLevel.HIGH, "b", "d",
+        )
+        knowledge_store.delete_entry(kid2)
+        assert knowledge_store.add_relationship(kid1, kid2) is False

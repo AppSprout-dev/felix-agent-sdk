@@ -135,12 +135,19 @@ class OpenAIProvider(BaseProvider):
 
     @staticmethod
     def _chunk_to_stream_chunks(chunk: Any) -> Iterator[StreamChunk]:
-        """Translate one raw OpenAI stream chunk into StreamChunks."""
-        if chunk.choices and chunk.choices[0].delta.content:
-            yield StreamChunk(text=chunk.choices[0].delta.content)
+        """Translate one raw OpenAI stream chunk into StreamChunks.
 
-        # Final chunk with usage (sent last when include_usage is set)
-        if chunk.usage:
+        A usage payload alone is not treated as terminal: stock OpenAI sends
+        usage on a dedicated choices-empty chunk, but some OpenAI-compatible
+        servers (e.g. vLLM with continuous_usage_stats) attach running usage
+        to content chunks mid-stream. A chunk is final only when it carries
+        usage AND is either choices-empty or carries a finish_reason.
+        """
+        choice = chunk.choices[0] if chunk.choices else None
+        if choice is not None and choice.delta.content:
+            yield StreamChunk(text=choice.delta.content)
+
+        if chunk.usage and (choice is None or choice.finish_reason):
             yield StreamChunk(
                 text="",
                 is_final=True,
@@ -207,13 +214,19 @@ class OpenAIProvider(BaseProvider):
 
         try:
             response = client.chat.completions.create(**create_kwargs)
-            for chunk in response:
-                done = False
-                for stream_chunk in self._chunk_to_stream_chunks(chunk):
-                    done = done or stream_chunk.is_final
-                    yield stream_chunk
-                if done:
-                    break
+            try:
+                for chunk in response:
+                    done = False
+                    for stream_chunk in self._chunk_to_stream_chunks(chunk):
+                        done = done or stream_chunk.is_final
+                        yield stream_chunk
+                    if done:
+                        break
+            finally:
+                # Release the HTTP response if we broke out early
+                close = getattr(response, "close", None)
+                if callable(close):
+                    close()
         except Exception as e:
             raise self._translate_error(e)
 
@@ -233,13 +246,21 @@ class OpenAIProvider(BaseProvider):
 
         try:
             response = await client.chat.completions.create(**create_kwargs)
-            async for chunk in response:
-                done = False
-                for stream_chunk in self._chunk_to_stream_chunks(chunk):
-                    done = done or stream_chunk.is_final
-                    yield stream_chunk
-                if done:
-                    break
+            try:
+                async for chunk in response:
+                    done = False
+                    for stream_chunk in self._chunk_to_stream_chunks(chunk):
+                        done = done or stream_chunk.is_final
+                        yield stream_chunk
+                    if done:
+                        break
+            finally:
+                # Release the HTTP response if we broke out early
+                close = getattr(response, "close", None)
+                if callable(close):
+                    maybe_coro = close()
+                    if hasattr(maybe_coro, "__await__"):
+                        await maybe_coro
         except Exception as e:
             raise self._translate_error(e)
 

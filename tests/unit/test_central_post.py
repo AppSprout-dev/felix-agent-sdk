@@ -467,3 +467,62 @@ class TestCentralPostShutdown:
         hub.process_next_message()
         hub.shutdown()
         assert hub.get_recent_messages() == []
+
+
+# -------------------------------------------------------------------------
+# Async message queue
+# -------------------------------------------------------------------------
+
+
+class TestAsyncMessageQueue:
+    @pytest.mark.asyncio
+    async def test_queue_and_process_async(self):
+        hub = CentralPost(max_agents=5)
+        msg = _make_message()
+        await hub.queue_message_async(msg)
+        processed = await hub.process_next_message_async()
+        assert processed is not None
+        assert processed.message_id == msg.message_id
+        assert hub.total_messages_processed == 1
+        await hub.shutdown_async()
+
+    @pytest.mark.asyncio
+    async def test_process_empty_async_queue_returns_none(self):
+        hub = CentralPost(max_agents=5)
+        assert await hub.process_next_message_async() is None
+        await hub.shutdown_async()
+
+    @pytest.mark.asyncio
+    async def test_async_messages_recorded_in_history(self):
+        hub = CentralPost(max_agents=5)
+        await hub.queue_message_async(_make_message(sender_id="async-agent"))
+        await hub.process_next_message_async()
+        recent = hub.get_recent_messages()
+        assert len(recent) == 1
+        assert recent[0].sender_id == "async-agent"
+        await hub.shutdown_async()
+
+    @pytest.mark.asyncio
+    async def test_shutdown_async_drains_queue(self):
+        hub = CentralPost(max_agents=5)
+        await hub.queue_message_async(_make_message())
+        await hub.queue_message_async(_make_message())
+        await hub.shutdown_async()
+        assert hub.is_active is False
+        assert await hub.process_next_message_async() is None
+
+    def test_queue_constructed_without_running_loop(self):
+        """Eager asyncio.Queue construction must not require an event loop."""
+        hub = CentralPost(max_agents=5)
+        assert hub._async_queue is not None
+        hub.shutdown()
+
+
+class TestUnboundedHistory:
+    def test_none_limit_keeps_all_messages(self):
+        hub = CentralPost(max_agents=5, message_history_limit=None)
+        for i in range(5):
+            hub.queue_message(_make_message(sender_id=f"agent-{i}"))
+            hub.process_next_message()
+        assert len(hub.get_recent_messages(count=100)) == 5
+        hub.shutdown()

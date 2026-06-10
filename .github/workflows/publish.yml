@@ -31,7 +31,7 @@ jobs:
           PKG_VERSION=$(python -c "from felix_agent_sdk import __version__; print(__version__)")
           TAG_VERSION="${GITHUB_REF_NAME#v}"
           if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::Release tag v$TAG_VERSION does not match package version $PKG_VERSION (_version.py)."
+            echo "::error::Release tag $GITHUB_REF_NAME does not match package version $PKG_VERSION (_version.py)."
             exit 1
           fi
           echo "Version check OK: $PKG_VERSION"
@@ -39,8 +39,8 @@ jobs:
       - name: Lint
         run: ruff check src/
 
-      - name: Type check
-        run: mypy src/
+      # No mypy gate here: CI enforces it on every PR, and an unpinned
+      # mypy minor release should not be able to block a tagged release.
 
       - name: Test
         run: pytest tests/ -v --tb=short

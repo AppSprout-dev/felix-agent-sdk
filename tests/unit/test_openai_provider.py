@@ -620,3 +620,102 @@ class TestOpenAIAsync:
             c2 = p._get_async_client()
             assert c1 is c2
             mock_mod.AsyncOpenAI.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Continuous usage stats (vLLM-style) must not truncate the stream
+# ---------------------------------------------------------------------------
+
+
+def _content_chunk(text, usage=None, finish_reason=None):
+    """A content chunk with explicit usage/finish_reason (no MagicMock auto-attrs)."""
+    delta = MagicMock()
+    delta.content = text
+    choice = MagicMock()
+    choice.delta = delta
+    choice.finish_reason = finish_reason
+    chunk = MagicMock()
+    chunk.choices = [choice]
+    chunk.usage = usage
+    return chunk
+
+
+def _usage(prompt=10, completion=5):
+    usage = MagicMock()
+    usage.prompt_tokens = prompt
+    usage.completion_tokens = completion
+    usage.total_tokens = prompt + completion
+    return usage
+
+
+class TestOpenAIContinuousUsageStats:
+    def test_mid_stream_usage_does_not_truncate(self, user_message):
+        """Regression: servers like vLLM (continuous_usage_stats) attach
+        running usage to every content chunk; the stream must not stop at
+        the first one."""
+        p = _make_provider()
+        chunks = [
+            _content_chunk("The ", usage=_usage(10, 1)),
+            _content_chunk("quick ", usage=_usage(10, 2)),
+            _content_chunk("fox", usage=_usage(10, 3), finish_reason="stop"),
+        ]
+        p._client.chat.completions.create.return_value = iter(chunks)
+
+        out = list(p.stream([user_message]))
+        texts = [c.text for c in out if not c.is_final]
+        assert texts == ["The ", "quick ", "fox"]
+        # finish_reason chunk carries usage -> terminal
+        assert out[-1].is_final is True
+        assert out[-1].usage["completion_tokens"] == 3
+
+    def test_usage_only_final_chunk_still_terminal(self, user_message):
+        """Stock OpenAI shape: dedicated choices-empty usage chunk."""
+        p = _make_provider()
+        final = MagicMock()
+        final.choices = []
+        final.usage = _usage()
+        p._client.chat.completions.create.return_value = iter(
+            [_content_chunk("hi"), final]
+        )
+        out = list(p.stream([user_message]))
+        assert out[-1].is_final is True
+
+
+class TestOpenAIAstreamTermination:
+    @pytest.mark.asyncio
+    async def test_astream_stops_after_final_chunk(self, user_message):
+        """Async twin of the poisoned-chunk guard: chunks after the terminal
+        usage chunk must never be consumed."""
+        from unittest.mock import AsyncMock
+
+        consumed = []
+        final = MagicMock()
+        final.choices = []
+        final.usage = _usage()
+        poisoned = MagicMock()
+        poisoned.choices = []
+        poisoned.usage = None
+
+        class _TrackingAsyncStream:
+            def __init__(self, chunks):
+                self._chunks = list(chunks)
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if not self._chunks:
+                    raise StopAsyncIteration
+                chunk = self._chunks.pop(0)
+                consumed.append(chunk)
+                return chunk
+
+        p = _make_provider()
+        p._async_client = MagicMock()
+        p._async_client.chat.completions.create = AsyncMock(
+            return_value=_TrackingAsyncStream([_content_chunk("a"), final, poisoned])
+        )
+
+        out = [c async for c in p.astream([user_message])]
+        assert out[-1].is_final is True
+        assert poisoned not in consumed
