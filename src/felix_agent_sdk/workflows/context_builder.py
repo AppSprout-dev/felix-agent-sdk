@@ -176,7 +176,7 @@ class CollaborativeContextBuilder:
 
         now = time.time()
         scored: list[tuple[Contribution, float]] = []
-        for i, contrib in enumerate(self._contributions):
+        for contrib in self._contributions:
             # Recency: more recent = higher (0.0 – 0.5)
             age = now - contrib.timestamp
             recency = max(0.0, 0.5 - age * 0.01)

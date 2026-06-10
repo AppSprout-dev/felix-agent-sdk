@@ -172,6 +172,22 @@ class Agent:
         if self._progress >= 1.0:
             self._state = AgentState.COMPLETED
 
+    def set_progress(self, progress: float) -> None:
+        """Place the agent directly at *progress* along the helix.
+
+        Bypasses time-based progression — used by orchestrators that need an
+        agent at a specific phase (e.g. a synthesis agent at t=1.0).
+
+        Raises:
+            ValueError: If *progress* is outside [0, 1] or the agent has
+                not been spawned.
+        """
+        if not (0.0 <= progress <= 1.0):
+            raise ValueError("progress must be between 0 and 1")
+        if self._state == AgentState.WAITING:
+            raise ValueError("Cannot set progress of unspawned agent")
+        self._progress = progress
+
     def get_position(self, current_time: float) -> Optional[Tuple[float, float, float]]:
         """Return (x, y, z) on the helix, or ``None`` if not yet spawned."""
         if self._state == AgentState.WAITING:

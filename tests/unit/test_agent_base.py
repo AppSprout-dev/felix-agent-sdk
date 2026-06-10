@@ -262,3 +262,24 @@ class TestAgentRepr:
 
     def test_repr_contains_state(self, agent):
         assert "waiting" in repr(agent)
+
+
+# ---------------------------------------------------------------------------
+# set_progress
+# ---------------------------------------------------------------------------
+
+
+class TestSetProgress:
+    def test_set_progress_directly(self, agent):
+        agent.spawn(0.2)
+        agent.set_progress(1.0)
+        assert agent.progress == 1.0
+
+    def test_set_progress_validates_range(self, agent):
+        agent.spawn(0.2)
+        with pytest.raises(ValueError, match="between 0 and 1"):
+            agent.set_progress(1.5)
+
+    def test_set_progress_requires_spawn(self, agent):
+        with pytest.raises(ValueError, match="unspawned"):
+            agent.set_progress(0.5)

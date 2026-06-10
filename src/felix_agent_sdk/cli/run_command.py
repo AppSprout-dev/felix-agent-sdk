@@ -97,13 +97,19 @@ def run_workflow(
 
 
 def _resolve_provider(name: str, model: str) -> BaseProvider | None:
-    """Try to create a provider by name. Returns None on failure."""
+    """Try to create a provider by name.
+
+    Returns None on failure, after printing the underlying cause to stderr
+    so users see *why* (missing dependency, bad API key, …) rather than a
+    bare "could not create provider".
+    """
     if not name or name == "auto":
         try:
             from felix_agent_sdk.providers import auto_detect_provider
 
             return auto_detect_provider()
-        except Exception:
+        except Exception as e:
+            print(f"Provider auto-detection failed: {e}", file=sys.stderr)
             return None
 
     try:
@@ -119,6 +125,6 @@ def _resolve_provider(name: str, model: str) -> BaseProvider | None:
             from felix_agent_sdk.providers import LocalProvider
 
             return LocalProvider(model=model or "default")
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Provider '{name}' could not be created: {e}", file=sys.stderr)
     return None
