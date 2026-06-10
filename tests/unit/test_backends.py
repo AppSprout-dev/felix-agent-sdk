@@ -47,6 +47,61 @@ class TestSQLiteBackendInitialization:
         memory_backend.initialize("t", _SCHEMA)  # should not raise
         assert memory_backend.count("t") == 0
 
+    def test_context_manager_closes_connection(self):
+        with SQLiteBackend() as backend:
+            backend.initialize("t", _SCHEMA)
+            backend.store("t", "1", {"name": "x", "value": 1.0, "tags": ""})
+        import sqlite3
+
+        with pytest.raises(sqlite3.ProgrammingError):
+            backend.get("t", "1")
+
+
+class TestSQLiteBackendHardening:
+    def test_order_by_rejects_injection(self, memory_backend):
+        memory_backend.initialize("t", _SCHEMA)
+        with pytest.raises(ValueError, match="identifier"):
+            memory_backend.query("t", order_by="name; DROP TABLE t--")
+
+    def test_order_by_rejects_unknown_column(self, memory_backend):
+        memory_backend.initialize("t", _SCHEMA)
+        with pytest.raises(ValueError, match="Unknown order_by"):
+            memory_backend.query("t", order_by="not_a_column")
+
+    def test_filter_field_rejects_injection(self, memory_backend):
+        memory_backend.initialize("t", _SCHEMA)
+        with pytest.raises(ValueError, match="identifier"):
+            memory_backend.query("t", filters={"name = '' OR 1=1 --": "x"})
+
+    def test_table_name_rejects_injection(self, memory_backend):
+        with pytest.raises(ValueError, match="identifier"):
+            memory_backend.initialize("t]; DROP TABLE t--", _SCHEMA)
+
+    def test_multithreaded_access(self, memory_backend):
+        import threading
+
+        memory_backend.initialize("t", _SCHEMA)
+        errors: list[Exception] = []
+
+        def writer(start: int) -> None:
+            try:
+                for i in range(start, start + 25):
+                    memory_backend.store(
+                        "t", f"r{i}", {"name": f"n{i}", "value": float(i), "tags": ""}
+                    )
+                    memory_backend.get("t", f"r{i}")
+            except Exception as e:  # pragma: no cover - failure path
+                errors.append(e)
+
+        threads = [threading.Thread(target=writer, args=(n * 25,)) for n in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == []
+        assert memory_backend.count("t") == 100
+
 
 class TestSQLiteBackendCRUD:
     def test_store_and_get(self, memory_backend):

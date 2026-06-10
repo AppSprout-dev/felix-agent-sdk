@@ -257,6 +257,22 @@ class TestKnowledgeStoreRelationships:
         rels = knowledge_store.get_relationships(kid2)
         assert len(rels) >= 1
 
+    def test_relationships_exclude_soft_deleted_entries(self, knowledge_store):
+        kid1 = knowledge_store.add_entry(
+            KnowledgeType.AGENT_INSIGHT, {"x": 1},
+            ConfidenceLevel.HIGH, "a", "d",
+        )
+        kid2 = knowledge_store.add_entry(
+            KnowledgeType.AGENT_INSIGHT, {"x": 2},
+            ConfidenceLevel.HIGH, "b", "d",
+        )
+        knowledge_store.add_relationship(kid1, kid2)
+
+        knowledge_store.delete_entry(kid2)
+        assert knowledge_store.get_relationships(kid1) == []
+        # The deleted entry itself reports no relationships
+        assert knowledge_store.get_relationships(kid2) == []
+
 
 # ------------------------------------------------------------------
 # Success rate / cleanup / summary

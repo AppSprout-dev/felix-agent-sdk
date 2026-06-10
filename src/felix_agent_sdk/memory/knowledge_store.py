@@ -426,10 +426,35 @@ class KnowledgeStore:
         return True
 
     def get_relationships(self, knowledge_id: str) -> list[dict[str, Any]]:
-        """Get all relationships for an entry (bidirectional)."""
+        """Get all relationships for an entry (bidirectional).
+
+        Relationships involving soft-deleted entries are excluded, matching
+        the soft-delete semantics of entry queries. Returns an empty list
+        if the entry itself is deleted or does not exist.
+        """
+        if not self._is_active_entry(knowledge_id):
+            return []
+
         outgoing = self._backend.query(_REL_TABLE, filters={"source_id": knowledge_id})
         incoming = self._backend.query(_REL_TABLE, filters={"target_id": knowledge_id})
-        return outgoing + incoming
+
+        results: list[dict[str, Any]] = []
+        for rel in outgoing + incoming:
+            other_id = (
+                rel.get("target_id")
+                if rel.get("source_id") == knowledge_id
+                else rel.get("source_id")
+            )
+            if other_id and self._is_active_entry(str(other_id)):
+                results.append(rel)
+        return results
+
+    def _is_active_entry(self, knowledge_id: str) -> bool:
+        """True if the entry exists and is not soft-deleted."""
+        data = self._backend.get(_TABLE, knowledge_id)
+        if data is None:
+            return False
+        return not KnowledgeEntry.from_dict(data).is_deleted
 
     # ------------------------------------------------------------------
     # Success rate
