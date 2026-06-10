@@ -6,7 +6,7 @@ where agents start wide (broad exploration) and spiral inward toward consensus.
 Quickstart:
     from felix_agent_sdk.providers import AnthropicProvider
 
-    provider = AnthropicProvider(model="claude-sonnet-4-5")
+    provider = AnthropicProvider(model="claude-sonnet-4-6")
 
 Full documentation: https://github.com/AppSprout-dev/felix-agent-sdk
 """

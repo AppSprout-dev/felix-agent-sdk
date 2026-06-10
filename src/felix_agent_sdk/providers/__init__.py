@@ -7,7 +7,7 @@ Usage:
     from felix_agent_sdk.providers import AnthropicProvider
     from felix_agent_sdk.providers import auto_detect_provider
 
-    provider = AnthropicProvider(model="claude-sonnet-4-5")
+    provider = AnthropicProvider(model="claude-sonnet-4-6")
     # or
     provider = auto_detect_provider()
 """

@@ -62,7 +62,7 @@ def default_config():
 
 @pytest.fixture
 def anthropic_config():
-    return ProviderConfig(model="claude-sonnet-4-5", api_key="sk-ant-test")
+    return ProviderConfig(model="claude-sonnet-4-6", api_key="sk-ant-test")
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ def mock_anthropic_response():
 
         response = MagicMock()
         response.content = [block]
-        response.model = "claude-sonnet-4-5"
+        response.model = "claude-sonnet-4-6"
         response.usage = usage
         response.stop_reason = stop_reason
         return response

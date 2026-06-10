@@ -79,7 +79,7 @@ class ProviderConfig:
     """Configuration for a provider instance.
 
     Attributes:
-        model: Model identifier (e.g., "claude-sonnet-4-5", "gpt-4o").
+        model: Model identifier (e.g., "claude-sonnet-4-6", "gpt-4o").
         api_key: API key for authentication. If None, reads from environment.
         base_url: Override the default API endpoint (useful for proxies, local servers).
         max_retries: Number of retries on transient failures.

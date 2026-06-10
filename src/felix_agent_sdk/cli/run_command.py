@@ -120,7 +120,7 @@ def _resolve_provider(name: str, model: str) -> BaseProvider | None:
         elif name == "anthropic":
             from felix_agent_sdk.providers import AnthropicProvider
 
-            return AnthropicProvider(model=model or "claude-sonnet-4-5")
+            return AnthropicProvider(model=model or "claude-sonnet-4-6")
         elif name == "local":
             from felix_agent_sdk.providers import LocalProvider
 

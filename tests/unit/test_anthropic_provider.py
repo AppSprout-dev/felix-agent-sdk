@@ -26,7 +26,7 @@ from felix_agent_sdk.providers.types import (
 # ---------------------------------------------------------------------------
 
 
-def _make_provider(api_key="sk-ant-test", model="claude-sonnet-4-5", **kwargs):
+def _make_provider(api_key="sk-ant-test", model="claude-sonnet-4-6", **kwargs):
     """Create an AnthropicProvider with a pre-injected mock client."""
     p = AnthropicProvider(model=model, api_key=api_key, **kwargs)
     p._client = MagicMock()
@@ -34,7 +34,7 @@ def _make_provider(api_key="sk-ant-test", model="claude-sonnet-4-5", **kwargs):
 
 
 def _mock_response(content="Hello!", input_tokens=10, output_tokens=5,
-                    stop_reason="end_turn", model="claude-sonnet-4-5"):
+                    stop_reason="end_turn", model="claude-sonnet-4-6"):
     block = MagicMock()
     block.text = content
     block.type = "text"
@@ -60,7 +60,7 @@ def _mock_response(content="Hello!", input_tokens=10, output_tokens=5,
 class TestAnthropicProviderInit:
     def test_default_model(self):
         p = AnthropicProvider(api_key="k")
-        assert p.model == "claude-sonnet-4-5"
+        assert p.model == "claude-sonnet-4-6"
 
     def test_custom_model(self):
         p = AnthropicProvider(model="claude-opus-4-5", api_key="k")
@@ -186,7 +186,7 @@ class TestAnthropicComplete:
 
         assert isinstance(result, CompletionResult)
         assert result.content == "Hello!"
-        assert result.model == "claude-sonnet-4-5"
+        assert result.model == "claude-sonnet-4-6"
 
     def test_usage_populated(self, conversation):
         p = _make_provider()

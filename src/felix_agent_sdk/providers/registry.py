@@ -145,12 +145,12 @@ def auto_detect_provider() -> BaseProvider:
 
     Example:
         export ANTHROPIC_API_KEY=sk-ant-...
-        export FELIX_MODEL=claude-sonnet-4-5
+        export FELIX_MODEL=claude-sonnet-4-6
 
         >>> from felix_agent_sdk.providers import auto_detect_provider
         >>> provider = auto_detect_provider()
         >>> print(provider)
-        AnthropicProvider(model='claude-sonnet-4-5')
+        AnthropicProvider(model='claude-sonnet-4-6')
     """
     return ProviderRegistry.auto_detect()
 

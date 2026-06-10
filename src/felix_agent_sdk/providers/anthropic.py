@@ -47,7 +47,7 @@ class AnthropicProvider(BaseProvider):
 
     def __init__(
         self,
-        model: str = "claude-sonnet-4-5",
+        model: str = "claude-sonnet-4-6",
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         **kwargs: Any,

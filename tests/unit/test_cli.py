@@ -162,11 +162,11 @@ class TestYamlLoader:
         path = self._write_yaml(tmp_path, {
             "task": "Test",
             "provider": "anthropic",
-            "model": "claude-sonnet-4-5",
+            "model": "claude-sonnet-4-6",
         })
         _, _, info = load_workflow_yaml(path)
         assert info["provider"] == "anthropic"
-        assert info["model"] == "claude-sonnet-4-5"
+        assert info["model"] == "claude-sonnet-4-6"
 
     def test_missing_task_raises(self, tmp_path):
         path = self._write_yaml(tmp_path, {"helix": "default"})
