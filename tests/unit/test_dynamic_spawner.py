@@ -102,6 +102,21 @@ class TestDynamicSpawner:
         assert "spawn.triggered" in types
         assert "spawn.completed" in types
 
+    def test_results_to_dicts_sees_real_agent_types(self):
+        """Regression: position_info from a real LLMAgent must carry
+        agent_type through to the ContentAnalyzer input dicts."""
+        from felix_agent_sdk.agents.llm_agent import LLMAgent, LLMTask
+        from felix_agent_sdk.core.helix import HelixGeometry
+        from felix_agent_sdk.spawning.spawner import DynamicSpawner
+
+        helix = HelixGeometry(top_radius=3.0, bottom_radius=0.5, height=8.0, turns=2)
+        agent = LLMAgent("a1", _mock_provider(), helix, agent_type="analysis")
+        agent.spawn(0.0)
+        result = agent.process_task(LLMTask(task_id="t1", description="analyse"))
+
+        dicts = DynamicSpawner._results_to_dicts([result])
+        assert dicts[0]["agent_type"] == "analysis"
+
     def test_spawn_completed_has_agent_id(self):
         bus = EventBus()
         bus.enable_history()

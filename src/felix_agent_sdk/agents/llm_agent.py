@@ -128,6 +128,20 @@ class LLMAgent(Agent, EventEmitterMixin):
         self._confidence_calibration_offset: float = 0.0
 
     # ------------------------------------------------------------------
+    # Position info
+    # ------------------------------------------------------------------
+
+    def get_position_info(self) -> Dict[str, Any]:
+        """Position dictionary extended with this agent's type.
+
+        Downstream consumers (DynamicSpawner gap analysis, registry metadata)
+        rely on ``agent_type`` being present alongside the positional fields.
+        """
+        info = super().get_position_info()
+        info["agent_type"] = self.agent_type
+        return info
+
+    # ------------------------------------------------------------------
     # Temperature
     # ------------------------------------------------------------------
 
