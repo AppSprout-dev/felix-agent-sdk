@@ -333,7 +333,7 @@ class LLMAgent(Agent, EventEmitterMixin):
 
         This is the primary entry point for running an agent on a task.
         """
-        start = time.monotonic()
+        start = time.perf_counter()
 
         self.emit_event(
             EventType.TASK_STARTED,
@@ -350,7 +350,7 @@ class LLMAgent(Agent, EventEmitterMixin):
         confidence = self.calculate_confidence(completion.content)
         self.record_confidence(confidence)
 
-        elapsed = time.monotonic() - start
+        elapsed = time.perf_counter() - start
         self.total_tokens_used += completion.total_tokens
         self.total_processing_time += elapsed
 
@@ -400,7 +400,7 @@ class LLMAgent(Agent, EventEmitterMixin):
             :class:`LLMResult` identical to what ``process_task`` would
             return for the same content.
         """
-        start = time.monotonic()
+        start = time.perf_counter()
 
         self.emit_event(
             EventType.TASK_STARTED,
@@ -431,7 +431,7 @@ class LLMAgent(Agent, EventEmitterMixin):
         confidence = self.calculate_confidence(completion.content)
         self.record_confidence(confidence)
 
-        elapsed = time.monotonic() - start
+        elapsed = time.perf_counter() - start
         self.total_tokens_used += completion.total_tokens
         self.total_processing_time += elapsed
 

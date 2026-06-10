@@ -295,6 +295,12 @@ class TestKnowledgeStoreUtilities:
             ConfidenceLevel.LOW, "a", "d",
         )
         knowledge_store.delete_entry(kid)
+        # Backdate the tombstone so the strict updated_at < cutoff comparison
+        # holds regardless of platform timer resolution (Windows time.time()
+        # ticks at ~15.6ms before Python 3.13).
+        raw = knowledge_store._backend.get("knowledge_entries", kid)
+        raw["updated_at"] = raw["updated_at"] - 60.0
+        knowledge_store._backend.store("knowledge_entries", kid, raw)
         # With max_age_days=0 it should purge immediately
         removed = knowledge_store.cleanup_old_entries(max_age_days=0)
         assert removed >= 1
