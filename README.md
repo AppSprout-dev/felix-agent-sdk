@@ -131,7 +131,7 @@ Felix provides three specialized agent types, each designed for a phase of the c
 from felix_agent_sdk import AgentFactory
 from felix_agent_sdk.providers import AnthropicProvider
 
-provider = AnthropicProvider(model="claude-sonnet-4-5")
+provider = AnthropicProvider(model="claude-sonnet-4-6")
 factory = AgentFactory(provider)
 
 team = factory.create_specialized_team("moderate")
@@ -252,7 +252,7 @@ Felix supports multiple LLM providers through a clean abstraction layer:
 from felix_agent_sdk.providers import AnthropicProvider, OpenAIProvider, LocalProvider
 
 # Anthropic Claude
-provider = AnthropicProvider(model="claude-sonnet-4-5", api_key="sk-...")
+provider = AnthropicProvider(model="claude-sonnet-4-6", api_key="sk-...")
 
 # OpenAI
 provider = OpenAIProvider(model="gpt-4o", api_key="sk-...")
@@ -269,7 +269,7 @@ provider = LocalProvider(
 ```bash
 export FELIX_PROVIDER=anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
-export FELIX_MODEL=claude-sonnet-4-5
+export FELIX_MODEL=claude-sonnet-4-6
 ```
 
 ```python
@@ -284,9 +284,11 @@ provider = auto_detect_provider()  # Reads from environment
 
 **Phase 1 — Core SDK (v0.1.0):** Pip-installable package with provider abstraction, core primitives, and documentation.
 
-**Phase 2 — Developer Experience (v0.2.0, Current):** Event system, structured logging, streaming, dynamic spawning, CLI tooling (`felix init`, `felix run`), expanded examples.
+**Phase 2 — Developer Experience (v0.2.0):** Event system, structured logging, streaming, dynamic spawning, CLI tooling (`felix init`, `felix run`), expanded examples.
 
-**Phase 3 — Community & Ecosystem:** MCP server integration, vector database connectors, observability adapters, community contribution framework.
+**Phase 3 — Hardening & Async (v0.3.0, Current):** Async provider interface (`acomplete`/`astream`), typed provider errors with retry-after extraction, strict type-checking gate, Windows + Python 3.13 CI, SQLite hardening, bounded message history.
+
+**Phase 4 — Community & Ecosystem:** Tool use / structured output support in the provider layer, MCP server integration, vector database connectors, observability adapters, community contribution framework.
 
 ---
 

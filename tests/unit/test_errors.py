@@ -187,3 +187,45 @@ class TestExceptionHandling:
                 pass  # expected
             else:
                 pytest.fail(f"{cls.__name__} not caught by ProviderError handler")
+
+
+# ---------------------------------------------------------------------------
+# Vendor exception helpers
+# ---------------------------------------------------------------------------
+
+
+class TestExtractHelpers:
+    def test_extract_status_code(self):
+        from felix_agent_sdk.providers.errors import extract_status_code
+
+        err = Exception("boom")
+        err.status_code = 429
+        assert extract_status_code(err) == 429
+
+    def test_extract_status_code_missing(self):
+        from felix_agent_sdk.providers.errors import extract_status_code
+
+        assert extract_status_code(Exception("boom")) is None
+
+    def test_extract_status_code_non_int(self):
+        from felix_agent_sdk.providers.errors import extract_status_code
+
+        err = Exception("boom")
+        err.status_code = "429"
+        assert extract_status_code(err) is None
+
+    def test_extract_retry_after(self):
+        from unittest.mock import MagicMock
+
+        from felix_agent_sdk.providers.errors import extract_retry_after
+
+        err = Exception("boom")
+        response = MagicMock()
+        response.headers = {"retry-after": "3"}
+        err.response = response
+        assert extract_retry_after(err) == 3.0
+
+    def test_extract_retry_after_missing_response(self):
+        from felix_agent_sdk.providers.errors import extract_retry_after
+
+        assert extract_retry_after(Exception("boom")) is None

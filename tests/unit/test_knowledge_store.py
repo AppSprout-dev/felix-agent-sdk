@@ -257,6 +257,22 @@ class TestKnowledgeStoreRelationships:
         rels = knowledge_store.get_relationships(kid2)
         assert len(rels) >= 1
 
+    def test_relationships_exclude_soft_deleted_entries(self, knowledge_store):
+        kid1 = knowledge_store.add_entry(
+            KnowledgeType.AGENT_INSIGHT, {"x": 1},
+            ConfidenceLevel.HIGH, "a", "d",
+        )
+        kid2 = knowledge_store.add_entry(
+            KnowledgeType.AGENT_INSIGHT, {"x": 2},
+            ConfidenceLevel.HIGH, "b", "d",
+        )
+        knowledge_store.add_relationship(kid1, kid2)
+
+        knowledge_store.delete_entry(kid2)
+        assert knowledge_store.get_relationships(kid1) == []
+        # The deleted entry itself reports no relationships
+        assert knowledge_store.get_relationships(kid2) == []
+
 
 # ------------------------------------------------------------------
 # Success rate / cleanup / summary
@@ -279,6 +295,12 @@ class TestKnowledgeStoreUtilities:
             ConfidenceLevel.LOW, "a", "d",
         )
         knowledge_store.delete_entry(kid)
+        # Backdate the tombstone so the strict updated_at < cutoff comparison
+        # holds regardless of platform timer resolution (Windows time.time()
+        # ticks at ~15.6ms before Python 3.13).
+        raw = knowledge_store._backend.get("knowledge_entries", kid)
+        raw["updated_at"] = raw["updated_at"] - 60.0
+        knowledge_store._backend.store("knowledge_entries", kid, raw)
         # With max_age_days=0 it should purge immediately
         removed = knowledge_store.cleanup_old_entries(max_age_days=0)
         assert removed >= 1
@@ -295,3 +317,25 @@ class TestKnowledgeStoreUtilities:
     def test_semantic_search_not_implemented(self, knowledge_store):
         with pytest.raises(NotImplementedError):
             knowledge_store.semantic_search([0.1, 0.2, 0.3])
+
+
+class TestRelationshipValidation:
+    def test_add_relationship_rejects_unknown_target(self, knowledge_store):
+        kid = knowledge_store.add_entry(
+            KnowledgeType.AGENT_INSIGHT, {"x": 1},
+            ConfidenceLevel.HIGH, "a", "d",
+        )
+        assert knowledge_store.add_relationship(kid, "nonexistent-id") is False
+        assert knowledge_store.get_relationships(kid) == []
+
+    def test_add_relationship_rejects_deleted_entry(self, knowledge_store):
+        kid1 = knowledge_store.add_entry(
+            KnowledgeType.AGENT_INSIGHT, {"x": 1},
+            ConfidenceLevel.HIGH, "a", "d",
+        )
+        kid2 = knowledge_store.add_entry(
+            KnowledgeType.AGENT_INSIGHT, {"x": 2},
+            ConfidenceLevel.HIGH, "b", "d",
+        )
+        knowledge_store.delete_entry(kid2)
+        assert knowledge_store.add_relationship(kid1, kid2) is False

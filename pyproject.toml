@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    { name = "AppSprout", email = "team@appsprout.com" },
+    { name = "AppSprout", email = "team@appsprout.dev" },
 ]
 keywords = [
     "ai", "agents", "multi-agent", "orchestration", "llm",
@@ -24,6 +24,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
@@ -48,6 +50,7 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.1",
     "mypy>=1.5",
+    "types-PyYAML>=6.0",
     "mkdocs-material>=9.0",
 ]
 
@@ -66,6 +69,9 @@ path = "src/felix_agent_sdk/_version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/felix_agent_sdk"]
 
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+
 [tool.ruff]
 target-version = "py310"
 line-length = 100
@@ -73,3 +79,8 @@ line-length = 100
 [tool.mypy]
 python_version = "3.10"
 strict = true
+
+[[tool.mypy.overrides]]
+# Optional provider SDKs — not installed in the base dev environment.
+module = ["anthropic", "anthropic.*", "openai", "openai.*", "tiktoken", "tiktoken.*"]
+ignore_missing_imports = true

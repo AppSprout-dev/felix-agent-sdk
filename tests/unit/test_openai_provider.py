@@ -464,3 +464,310 @@ class TestOpenAIErrorPropagation:
         p._client.chat.completions.create.side_effect = Exception("429 rate limit")
         with pytest.raises(RateLimitError):
             list(p.stream([user_message]))
+
+
+# ---------------------------------------------------------------------------
+# Status-code / retry-after aware error translation
+# ---------------------------------------------------------------------------
+
+
+def _status_error(message, status_code, retry_after=None):
+    """Mimic a vendor SDK APIStatusError carrying status_code and response."""
+    err = Exception(message)
+    err.status_code = status_code
+    headers = {}
+    if retry_after is not None:
+        headers["retry-after"] = retry_after
+    response = MagicMock()
+    response.headers = headers
+    err.response = response
+    return err
+
+
+class TestOpenAITypedErrorTranslation:
+    def test_status_401_maps_to_authentication(self):
+        p = _make_provider()
+        result = p._translate_error(_status_error("nope", 401))
+        assert isinstance(result, AuthenticationError)
+        assert result.status_code == 401
+
+    def test_status_429_maps_to_rate_limit_with_retry_after(self):
+        p = _make_provider()
+        result = p._translate_error(_status_error("slow down", 429, retry_after="2.5"))
+        assert isinstance(result, RateLimitError)
+        assert result.status_code == 429
+        assert result.retry_after == 2.5
+
+    def test_retry_after_absent_is_none(self):
+        p = _make_provider()
+        result = p._translate_error(_status_error("slow down", 429))
+        assert isinstance(result, RateLimitError)
+        assert result.retry_after is None
+
+    def test_non_numeric_retry_after_is_none(self):
+        p = _make_provider()
+        result = p._translate_error(
+            _status_error("slow down", 429, retry_after="Wed, 21 Oct 2026 07:28:00 GMT")
+        )
+        assert isinstance(result, RateLimitError)
+        assert result.retry_after is None
+
+    def test_generic_error_carries_status_code(self):
+        p = _make_provider()
+        result = p._translate_error(_status_error("boom", 500))
+        assert isinstance(result, ProviderError)
+        assert result.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# Streaming stops after the final usage chunk
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAIStreamTermination:
+    def test_stream_stops_after_final_chunk(self, user_message):
+        p = _make_provider()
+        chunks = _mock_stream_chunks(["a", "b"])
+
+        # A chunk after the usage chunk must never be consumed
+        poisoned = MagicMock()
+        poisoned.choices = []
+        poisoned.usage = None
+
+        consumed = []
+
+        def chunk_iter():
+            for c in chunks:
+                consumed.append(c)
+                yield c
+            consumed.append(poisoned)
+            yield poisoned
+
+        p._client.chat.completions.create.return_value = chunk_iter()
+        out = list(p.stream([user_message]))
+
+        assert out[-1].is_final is True
+        assert poisoned not in consumed
+
+
+# ---------------------------------------------------------------------------
+# Async interface
+# ---------------------------------------------------------------------------
+
+
+class _AsyncChunkStream:
+    """Async-iterable wrapper over a list of mock chunks."""
+
+    def __init__(self, chunks):
+        self._chunks = list(chunks)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._chunks:
+            raise StopAsyncIteration
+        return self._chunks.pop(0)
+
+
+class TestOpenAIAsync:
+    @pytest.mark.asyncio
+    async def test_acomplete_returns_completion_result(self, user_message):
+        from unittest.mock import AsyncMock
+
+        p = _make_provider()
+        p._async_client = MagicMock()
+        p._async_client.chat.completions.create = AsyncMock(return_value=_mock_response())
+
+        result = await p.acomplete([user_message])
+        assert isinstance(result, CompletionResult)
+        assert result.content == "Hello!"
+
+    @pytest.mark.asyncio
+    async def test_astream_yields_chunks_with_final_usage(self, user_message):
+        from unittest.mock import AsyncMock
+
+        p = _make_provider()
+        p._async_client = MagicMock()
+        p._async_client.chat.completions.create = AsyncMock(
+            return_value=_AsyncChunkStream(_mock_stream_chunks(["Hello", " world"]))
+        )
+
+        out = [chunk async for chunk in p.astream([user_message])]
+        texts = [c.text for c in out if not c.is_final]
+        assert texts == ["Hello", " world"]
+        assert out[-1].is_final is True
+        assert out[-1].usage["total_tokens"] == 15
+
+    @pytest.mark.asyncio
+    async def test_acomplete_translates_errors(self, user_message):
+        from unittest.mock import AsyncMock
+
+        p = _make_provider()
+        p._async_client = MagicMock()
+        p._async_client.chat.completions.create = AsyncMock(
+            side_effect=Exception("429 rate limit")
+        )
+        with pytest.raises(RateLimitError):
+            await p.acomplete([user_message])
+
+    def test_async_client_created_once(self):
+        mock_mod = MagicMock()
+        mock_mod.AsyncOpenAI.return_value = MagicMock()
+        with patch.dict("sys.modules", {"openai": mock_mod}):
+            p = OpenAIProvider(api_key="k")
+            c1 = p._get_async_client()
+            c2 = p._get_async_client()
+            assert c1 is c2
+            mock_mod.AsyncOpenAI.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Continuous usage stats (vLLM-style) must not truncate the stream
+# ---------------------------------------------------------------------------
+
+
+def _content_chunk(text, usage=None, finish_reason=None):
+    """A content chunk with explicit usage/finish_reason (no MagicMock auto-attrs)."""
+    delta = MagicMock()
+    delta.content = text
+    choice = MagicMock()
+    choice.delta = delta
+    choice.finish_reason = finish_reason
+    chunk = MagicMock()
+    chunk.choices = [choice]
+    chunk.usage = usage
+    return chunk
+
+
+def _usage(prompt=10, completion=5):
+    usage = MagicMock()
+    usage.prompt_tokens = prompt
+    usage.completion_tokens = completion
+    usage.total_tokens = prompt + completion
+    return usage
+
+
+class TestOpenAIContinuousUsageStats:
+    def test_mid_stream_usage_does_not_truncate(self, user_message):
+        """Regression: servers like vLLM (continuous_usage_stats) attach
+        running usage to every content chunk; the stream must not stop at
+        the first one."""
+        p = _make_provider()
+        chunks = [
+            _content_chunk("The ", usage=_usage(10, 1)),
+            _content_chunk("quick ", usage=_usage(10, 2)),
+            _content_chunk("fox", usage=_usage(10, 3), finish_reason="stop"),
+        ]
+        p._client.chat.completions.create.return_value = iter(chunks)
+
+        out = list(p.stream([user_message]))
+        texts = [c.text for c in out if not c.is_final]
+        assert texts == ["The ", "quick ", "fox"]
+        # finish_reason chunk carries usage -> terminal
+        assert out[-1].is_final is True
+        assert out[-1].usage["completion_tokens"] == 3
+
+    def test_usage_only_final_chunk_still_terminal(self, user_message):
+        """Stock OpenAI shape: dedicated choices-empty usage chunk."""
+        p = _make_provider()
+        final = MagicMock()
+        final.choices = []
+        final.usage = _usage()
+        p._client.chat.completions.create.return_value = iter(
+            [_content_chunk("hi"), final]
+        )
+        out = list(p.stream([user_message]))
+        assert out[-1].is_final is True
+
+
+class TestOpenAIAstreamTermination:
+    @pytest.mark.asyncio
+    async def test_astream_stops_after_final_chunk(self, user_message):
+        """Async twin of the poisoned-chunk guard: chunks after the terminal
+        usage chunk must never be consumed."""
+        from unittest.mock import AsyncMock
+
+        consumed = []
+        final = MagicMock()
+        final.choices = []
+        final.usage = _usage()
+        poisoned = MagicMock()
+        poisoned.choices = []
+        poisoned.usage = None
+
+        class _TrackingAsyncStream:
+            def __init__(self, chunks):
+                self._chunks = list(chunks)
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if not self._chunks:
+                    raise StopAsyncIteration
+                chunk = self._chunks.pop(0)
+                consumed.append(chunk)
+                return chunk
+
+        p = _make_provider()
+        p._async_client = MagicMock()
+        p._async_client.chat.completions.create = AsyncMock(
+            return_value=_TrackingAsyncStream([_content_chunk("a"), final, poisoned])
+        )
+
+        out = [c async for c in p.astream([user_message])]
+        assert out[-1].is_final is True
+        assert poisoned not in consumed
+
+
+class TestOpenAIModelNotFoundTranslation:
+    def test_status_404_maps_to_model_not_found(self):
+        p = _make_provider()
+        result = p._translate_error(_status_error("missing", 404))
+        assert isinstance(result, ModelNotFoundError)
+        assert result.status_code == 404
+
+    def test_sdk_notfounderror_class_name_maps(self):
+        """Regression: 'not_found' substring never matched the SDK's
+        NotFoundError class name."""
+        p = _make_provider()
+
+        class NotFoundError(Exception):
+            pass
+
+        result = p._translate_error(NotFoundError("model gone"))
+        assert isinstance(result, ModelNotFoundError)
+
+
+class _ClosableStream:
+    """Iterable stream whose close() raises, mimicking a teardown failure."""
+
+    def __init__(self, chunks, raise_on_close=True):
+        self._chunks = list(chunks)
+        self._raise_on_close = raise_on_close
+        self.closed = False
+
+    def __iter__(self):
+        return iter(self._chunks)
+
+    def close(self):
+        self.closed = True
+        if self._raise_on_close:
+            raise RuntimeError("connection reset during teardown")
+
+
+class TestOpenAIStreamCloseErrors:
+    def test_close_failure_does_not_mask_successful_stream(self, user_message):
+        """A close() raising after the final chunk must not turn a complete
+        stream into a ProviderError."""
+        p = _make_provider()
+        final = MagicMock()
+        final.choices = []
+        final.usage = _usage()
+        stream = _ClosableStream([_content_chunk("hi"), final])
+        p._client.chat.completions.create.return_value = stream
+
+        out = list(p.stream([user_message]))  # must not raise
+        assert out[-1].is_final is True
+        assert stream.closed is True

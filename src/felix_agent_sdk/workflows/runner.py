@@ -76,7 +76,7 @@ class FelixWorkflow(EventEmitterMixin):
         Returns:
             :class:`WorkflowResult` with synthesised output and metadata.
         """
-        start = time.monotonic()
+        start = time.perf_counter()
 
         # --- Setup ---
         hub = CentralPost(max_agents=self._config.max_agents, event_bus=self._event_bus)
@@ -173,7 +173,7 @@ class FelixWorkflow(EventEmitterMixin):
             if all_results:
                 final_confidence = sum(r.confidence for r in all_results) / len(all_results)
 
-            elapsed = time.monotonic() - start
+            elapsed = time.perf_counter() - start
             total_tokens = sum(r.token_budget_used for r in all_results)
 
             result = WorkflowResult(

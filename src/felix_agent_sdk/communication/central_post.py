@@ -10,9 +10,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import deque
 from enum import Enum
 from queue import Empty, Queue
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Deque, Dict, List, Optional, TYPE_CHECKING
 
 from felix_agent_sdk.communication.messages import Message, MessageType
 from felix_agent_sdk.communication.registry import AgentRegistry
@@ -29,6 +30,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Agent lifecycle event enum
 # ---------------------------------------------------------------------------
+
+
+class HubCapacityError(RuntimeError):
+    """Raised when the hub is at ``max_agents`` capacity and a new agent registers.
+
+    Subclasses :class:`RuntimeError` for backward compatibility with callers
+    that caught ``RuntimeError`` from ``register_agent_id`` in earlier versions.
+    """
 
 
 class AgentLifecycleEvent(Enum):
@@ -60,7 +69,7 @@ class CentralPost:
 
     Architecture:
         - Sync ``Queue`` for single-threaded / test usage.
-        - Async ``asyncio.Queue`` (lazy-initialised) for async runtimes.
+        - Async ``asyncio.Queue`` (created eagerly at construction) for async runtimes.
         - ``AgentRegistry`` tracks helix positions, phases, and confidence.
         - Lifecycle callbacks notify callers when agents spawn/complete/fail.
 
@@ -68,6 +77,11 @@ class CentralPost:
         max_agents: Maximum number of agents that may be registered simultaneously.
         enable_metrics: Reserved flag for future metrics collection.
         provider: Optional provider reference (slot — not used by message handling yet).
+        event_bus: Optional event bus for lifecycle event bridging.
+        message_history_limit: Maximum number of processed messages retained
+            for :meth:`get_recent_messages`. Older messages are discarded
+            (the ``total_messages_processed`` counter is unaffected).
+            Pass ``None`` for unbounded history (pre-0.3.0 behavior).
     """
 
     def __init__(
@@ -76,6 +90,7 @@ class CentralPost:
         enable_metrics: bool = False,
         provider: Optional[BaseProvider] = None,
         event_bus: Optional[EventBus] = None,
+        message_history_limit: Optional[int] = 1000,
     ) -> None:
         self._max_agents = max_agents
         self._enable_metrics = enable_metrics
@@ -91,14 +106,16 @@ class CentralPost:
 
         # Sync message queue
         self._message_queue: Queue[Message] = Queue()
-        self._processed_messages: List[Message] = []
+        # Bounded history — prevents unbounded memory growth in long runs.
+        self._processed_messages: Deque[Message] = deque(maxlen=message_history_limit)
         self._total_messages_processed: int = 0
 
-        # Async message queue (lazy — created on first async use)
-        self._async_queue: Optional[asyncio.Queue] = None  # type: ignore[type-arg]
+        # Async message queue. Safe to construct eagerly on Python >= 3.10:
+        # asyncio.Queue no longer binds an event loop at construction time.
+        self._async_queue: asyncio.Queue[Message] = asyncio.Queue()
 
         # Lifecycle callbacks: event -> list of callables
-        self._lifecycle_callbacks: Dict[AgentLifecycleEvent, List[Callable]] = {
+        self._lifecycle_callbacks: Dict[AgentLifecycleEvent, List[Callable[[str], None]]] = {
             event: [] for event in AgentLifecycleEvent
         }
 
@@ -135,7 +152,7 @@ class CentralPost:
 
     def register_agent(
         self, agent: Agent, metadata: Optional[Dict[str, Any]] = None
-    ) -> Optional[str]:
+    ) -> str:
         """Register an agent object and extract metadata from its attributes.
 
         Args:
@@ -143,21 +160,21 @@ class CentralPost:
             metadata: Extra metadata to merge (takes precedence over auto-extracted).
 
         Returns:
-            The ``agent_id`` string on success, or ``None`` if the hub is at capacity.
+            The ``agent_id`` string.
+
+        Raises:
+            HubCapacityError: If the hub is at capacity.
         """
-        agent_id: str = getattr(agent, "agent_id", None) or str(id(agent))
+        raw_id = getattr(agent, "agent_id", None)
+        agent_id: str = str(raw_id) if raw_id is not None else str(id(agent))
 
         if (
             len(self._registered_agents) >= self._max_agents
             and agent_id not in self._registered_agents
         ):
-            logger.warning(
-                "CentralPost at capacity (%d/%d) — cannot register %s",
-                len(self._registered_agents),
-                self._max_agents,
-                agent_id,
+            raise HubCapacityError(
+                f"CentralPost at capacity ({self._max_agents} agents) — cannot register {agent_id!r}"
             )
-            return None
 
         auto_meta: Dict[str, Any] = {}
         for attr in ("agent_type", "spawn_time", "confidence", "state"):
@@ -184,13 +201,13 @@ class CentralPost:
             The ``agent_id`` string.
 
         Raises:
-            RuntimeError: If the hub is at capacity.
+            HubCapacityError: If the hub is at capacity.
         """
         if (
             len(self._registered_agents) >= self._max_agents
             and agent_id not in self._registered_agents
         ):
-            raise RuntimeError(
+            raise HubCapacityError(
                 f"CentralPost at capacity ({self._max_agents} agents) — cannot register {agent_id!r}"
             )
 
@@ -264,19 +281,13 @@ class CentralPost:
     # Async message queue
     # ------------------------------------------------------------------
 
-    def _ensure_async_queue(self) -> asyncio.Queue:  # type: ignore[type-arg]
-        """Lazily create the async queue on first use."""
-        if self._async_queue is None:
-            self._async_queue = asyncio.Queue()
-        return self._async_queue
-
     async def queue_message_async(self, message: Message) -> None:
         """Enqueue a message for asynchronous processing.
 
         Args:
             message: The Message to enqueue.
         """
-        await self._ensure_async_queue().put(message)
+        await self._async_queue.put(message)
         logger.debug(
             "Async queued message %s [%s] from %s",
             message.message_id,
@@ -290,9 +301,8 @@ class CentralPost:
         Returns:
             The processed Message, or None if the queue was empty.
         """
-        q = self._ensure_async_queue()
         try:
-            message = q.get_nowait()
+            message = self._async_queue.get_nowait()
         except asyncio.QueueEmpty:
             return None
 
@@ -479,7 +489,7 @@ class CentralPost:
         Returns:
             List of Message objects, most recent last.
         """
-        messages = self._processed_messages
+        messages: List[Message] = list(self._processed_messages)
         if message_type is not None:
             messages = [m for m in messages if m.message_type == message_type]
         return messages[-count:]
@@ -609,12 +619,11 @@ class CentralPost:
         """Shutdown the hub asynchronously, draining the async queue."""
         self._is_active = False
 
-        if self._async_queue is not None:
-            while not self._async_queue.empty():
-                try:
-                    self._async_queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    break
+        while not self._async_queue.empty():
+            try:
+                self._async_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
 
         self._registered_agents.clear()
         self._connection_times.clear()

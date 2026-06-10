@@ -37,7 +37,7 @@ class HelixGeometry:
         top_radius: float,
         bottom_radius: float,
         height: float,
-        turns: int,
+        turns: float,
     ) -> None:
         """Initialize helix with geometric parameters.
 
@@ -45,7 +45,7 @@ class HelixGeometry:
             top_radius: Radius at the top of the helix (t=0, z=height).
             bottom_radius: Radius at the bottom of the helix (t=1, z=0).
             height: Total vertical height of the helix.
-            turns: Number of complete rotations from top to bottom.
+            turns: Number of rotations from top to bottom (fractional turns allowed).
 
         Raises:
             ValueError: If parameters are invalid.
@@ -62,7 +62,7 @@ class HelixGeometry:
         top_radius: float,
         bottom_radius: float,
         height: float,
-        turns: int,
+        turns: float,
     ) -> None:
         """Validate helix parameters for mathematical consistency."""
         if top_radius <= bottom_radius:
@@ -223,7 +223,7 @@ class HelixConfig:
     top_radius: float
     bottom_radius: float
     height: float
-    turns: int
+    turns: float
 
     def __post_init__(self) -> None:
         """Validate config parameters at construction time."""

@@ -45,10 +45,10 @@ class _NotAProvider:
 def _clean_registry():
     """Save and restore registry state around each test."""
     original_providers = ProviderRegistry._providers.copy()
-    original_order = ProviderRegistry._detection_order.copy()
+    original_priorities = ProviderRegistry._detection_priorities.copy()
     yield
     ProviderRegistry._providers = original_providers
-    ProviderRegistry._detection_order = original_order
+    ProviderRegistry._detection_priorities = original_priorities
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +73,7 @@ class TestRegister:
 
     def test_register_adds_to_detection_order(self):
         ProviderRegistry.register("mytest", _TestProvider)
-        assert "mytest" in ProviderRegistry._detection_order
+        assert "mytest" in ProviderRegistry._detection_order()
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +193,7 @@ class TestAutoDetect:
         """When local is not registered and no keys found, should raise."""
         # Remove all providers
         ProviderRegistry._providers.clear()
-        ProviderRegistry._detection_order.clear()
+        ProviderRegistry._detection_priorities.clear()
         with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ProviderError, match="No provider could be auto-detected"):
                 ProviderRegistry.auto_detect()
@@ -210,3 +210,26 @@ class TestAutoDetectFunction:
             provider = auto_detect_provider()
             from felix_agent_sdk.providers.local import LocalProvider
             assert isinstance(provider, LocalProvider)
+
+
+# ---------------------------------------------------------------------------
+# Detection priority ordering
+# ---------------------------------------------------------------------------
+
+
+class TestDetectionPriority:
+    def test_detection_order_sorted_by_priority(self):
+        ProviderRegistry.register("zeta", _TestProvider, detection_priority=5)
+        ProviderRegistry.register("alpha", _TestProvider, detection_priority=50)
+        order = ProviderRegistry._detection_order()
+        assert order.index("zeta") < order.index("alpha")
+        # Built-in anthropic (priority 10) sits between them
+        assert order.index("zeta") < order.index("anthropic") < order.index("alpha")
+
+    def test_priorities_survive_later_registrations(self):
+        """Regression: the old sort reset every existing priority to 100."""
+        ProviderRegistry.register("first", _TestProvider, detection_priority=1)
+        ProviderRegistry.register("second", _TestProvider, detection_priority=99)
+        ProviderRegistry.register("third", _TestProvider, detection_priority=50)
+        order = ProviderRegistry._detection_order()
+        assert order.index("first") < order.index("third") < order.index("second")

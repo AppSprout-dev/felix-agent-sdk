@@ -6,7 +6,7 @@ where agents start wide (broad exploration) and spiral inward toward consensus.
 Quickstart:
     from felix_agent_sdk.providers import AnthropicProvider
 
-    provider = AnthropicProvider(model="claude-sonnet-4-5")
+    provider = AnthropicProvider(model="claude-sonnet-4-6")
 
 Full documentation: https://github.com/AppSprout-dev/felix-agent-sdk
 """
@@ -30,7 +30,13 @@ from felix_agent_sdk.providers import (
     OpenAIProvider,
     auto_detect_provider,
 )
-from felix_agent_sdk.communication import CentralPost, Message, MessageType, Spoke
+from felix_agent_sdk.communication import (
+    CentralPost,
+    HubCapacityError,
+    Message,
+    MessageType,
+    Spoke,
+)
 from felix_agent_sdk.events import EventBus, EventType, FelixEvent
 from felix_agent_sdk.memory import ContextCompressor, KnowledgeStore, TaskMemory
 from felix_agent_sdk.spawning import ConfidenceMonitor, DynamicSpawner
@@ -60,6 +66,7 @@ __all__ = [
     "AgentFactory",
     # Communication
     "CentralPost",
+    "HubCapacityError",
     "Message",
     "MessageType",
     "Spoke",

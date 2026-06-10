@@ -325,6 +325,18 @@ class TestProcessTask:
         assert "progress" in result.position_info
         assert "phase" in result.position_info
 
+    def test_result_position_info_includes_agent_type(self, agent, task):
+        # Regression: DynamicSpawner gap analysis reads agent_type from
+        # position_info; it must be populated by real agents, not just
+        # hand-built test fixtures.
+        agent.spawn(0.0)
+        result = agent.process_task(task)
+        assert result.position_info["agent_type"] == "research"
+
+    def test_get_position_info_includes_agent_type(self, agent):
+        agent.spawn(0.0)
+        assert agent.get_position_info()["agent_type"] == "research"
+
 
 # -------------------------------------------------------------------------
 # Helical checkpoints

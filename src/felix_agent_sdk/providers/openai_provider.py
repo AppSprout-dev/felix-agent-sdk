@@ -8,8 +8,9 @@ shadowing the openai package import within this module.
 
 from __future__ import annotations
 
+import logging
 import os
-from typing import Any, Dict, Iterator, List, Optional, Sequence
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Sequence
 
 from .base import BaseProvider
 from .errors import (
@@ -18,8 +19,12 @@ from .errors import (
     ModelNotFoundError,
     ProviderError,
     RateLimitError,
+    extract_retry_after,
+    extract_status_code,
 )
 from .types import ChatMessage, CompletionResult, ProviderConfig, StreamChunk
+
+logger = logging.getLogger("felix.providers")
 
 
 class OpenAIProvider(BaseProvider):
@@ -53,29 +58,108 @@ class OpenAIProvider(BaseProvider):
         )
         super().__init__(config)
 
-    def _get_client(self):
+    def _import_sdk(self) -> Any:
+        try:
+            import openai
+        except ImportError:
+            raise ImportError(
+                "OpenAI provider requires the 'openai' package. "
+                "Install with: pip install felix-agent-sdk[openai]"
+            )
+        return openai
+
+    def _client_kwargs(self) -> Dict[str, Any]:
+        client_kwargs: Dict[str, Any] = {}
+        if self.config.api_key:
+            client_kwargs["api_key"] = self.config.api_key
+        if self.config.base_url:
+            client_kwargs["base_url"] = self.config.base_url
+        client_kwargs["max_retries"] = self.config.max_retries
+        client_kwargs["timeout"] = self.config.timeout
+        return client_kwargs
+
+    def _get_client(self) -> Any:
         """Lazy-initialize the OpenAI client."""
         if self._client is None:
-            try:
-                import openai
-            except ImportError:
-                raise ImportError(
-                    "OpenAI provider requires the 'openai' package. "
-                    "Install with: pip install felix-agent-sdk[openai]"
-                )
-            client_kwargs: Dict[str, Any] = {}
-            if self.config.api_key:
-                client_kwargs["api_key"] = self.config.api_key
-            if self.config.base_url:
-                client_kwargs["base_url"] = self.config.base_url
-            client_kwargs["max_retries"] = self.config.max_retries
-            client_kwargs["timeout"] = self.config.timeout
-            self._client = openai.OpenAI(**client_kwargs)
+            openai = self._import_sdk()
+            self._client = openai.OpenAI(**self._client_kwargs())
         return self._client
+
+    def _get_async_client(self) -> Any:
+        """Lazy-initialize the async OpenAI client."""
+        if self._async_client is None:
+            openai = self._import_sdk()
+            self._async_client = openai.AsyncOpenAI(**self._client_kwargs())
+        return self._async_client
 
     def _format_messages(self, messages: Sequence[ChatMessage]) -> List[Dict[str, str]]:
         """Convert ChatMessages to OpenAI's format (system stays inline)."""
         return [{"role": msg.role.value, "content": msg.content} for msg in messages]
+
+    def _build_create_kwargs(
+        self,
+        messages: Sequence[ChatMessage],
+        temperature: Optional[float],
+        max_tokens: Optional[int],
+        stop_sequences: Optional[List[str]],
+        extra: Dict[str, Any],
+        stream: bool = False,
+    ) -> Dict[str, Any]:
+        """Assemble the keyword arguments for a chat.completions.create call."""
+        create_kwargs: Dict[str, Any] = {
+            "model": self.config.model,
+            "messages": self._format_messages(messages),
+            "temperature": self._resolve_temperature(temperature),
+            "max_tokens": self._resolve_max_tokens(max_tokens),
+        }
+        if stream:
+            create_kwargs["stream"] = True
+            create_kwargs["stream_options"] = {"include_usage": True}
+        if stop_sequences:
+            create_kwargs["stop"] = stop_sequences
+        create_kwargs.update(extra)
+        return create_kwargs
+
+    @staticmethod
+    def _to_completion_result(response: Any) -> CompletionResult:
+        choice = response.choices[0]
+        usage = response.usage
+        return CompletionResult(
+            content=choice.message.content or "",
+            model=response.model,
+            usage={
+                "prompt_tokens": usage.prompt_tokens if usage else 0,
+                "completion_tokens": usage.completion_tokens if usage else 0,
+                "total_tokens": usage.total_tokens if usage else 0,
+            },
+            finish_reason=choice.finish_reason or "stop",
+            raw_response=response,
+        )
+
+    @staticmethod
+    def _chunk_to_stream_chunks(chunk: Any) -> Iterator[StreamChunk]:
+        """Translate one raw OpenAI stream chunk into StreamChunks.
+
+        A usage payload alone is not treated as terminal: stock OpenAI sends
+        usage on a dedicated choices-empty chunk, but some OpenAI-compatible
+        servers (e.g. vLLM with continuous_usage_stats) attach running usage
+        to content chunks mid-stream. A chunk is final only when it carries
+        usage AND is either choices-empty or carries a finish_reason.
+        """
+        choice = chunk.choices[0] if chunk.choices else None
+        if choice is not None and choice.delta.content:
+            yield StreamChunk(text=choice.delta.content)
+
+        if chunk.usage and (choice is None or choice.finish_reason):
+            yield StreamChunk(
+                text="",
+                is_final=True,
+                usage={
+                    "prompt_tokens": chunk.usage.prompt_tokens,
+                    "completion_tokens": chunk.usage.completion_tokens,
+                    "total_tokens": chunk.usage.total_tokens,
+                },
+            )
 
     def complete(
         self,
@@ -87,35 +171,63 @@ class OpenAIProvider(BaseProvider):
         **kwargs: Any,
     ) -> CompletionResult:
         client = self._get_client()
-        api_messages = self._format_messages(messages)
-
-        create_kwargs: Dict[str, Any] = {
-            "model": self.config.model,
-            "messages": api_messages,
-            "temperature": self._resolve_temperature(temperature),
-            "max_tokens": self._resolve_max_tokens(max_tokens),
-        }
-        if stop_sequences:
-            create_kwargs["stop"] = stop_sequences
-        create_kwargs.update(kwargs)
+        create_kwargs = self._build_create_kwargs(
+            messages, temperature, max_tokens, stop_sequences, kwargs
+        )
 
         try:
             response = client.chat.completions.create(**create_kwargs)
-            choice = response.choices[0]
-            usage = response.usage
-            return CompletionResult(
-                content=choice.message.content or "",
-                model=response.model,
-                usage={
-                    "prompt_tokens": usage.prompt_tokens if usage else 0,
-                    "completion_tokens": usage.completion_tokens if usage else 0,
-                    "total_tokens": usage.total_tokens if usage else 0,
-                },
-                finish_reason=choice.finish_reason or "stop",
-                raw_response=response,
-            )
+            return self._to_completion_result(response)
         except Exception as e:
             raise self._translate_error(e)
+
+    async def acomplete(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        stop_sequences: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> CompletionResult:
+        client = self._get_async_client()
+        create_kwargs = self._build_create_kwargs(
+            messages, temperature, max_tokens, stop_sequences, kwargs
+        )
+
+        try:
+            response = await client.chat.completions.create(**create_kwargs)
+            return self._to_completion_result(response)
+        except Exception as e:
+            raise self._translate_error(e)
+
+    @staticmethod
+    def _safe_close(response: Any) -> None:
+        """Best-effort release of a stream's HTTP response.
+
+        Teardown errors must never surface: a close() failure after the
+        stream has already yielded its content would otherwise be caught by
+        the surrounding translate-error handler and turn a fully successful
+        stream into a ProviderError.
+        """
+        close = getattr(response, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                logger.debug("Error closing OpenAI stream response", exc_info=True)
+
+    @staticmethod
+    async def _safe_aclose(response: Any) -> None:
+        """Async counterpart of :meth:`_safe_close`."""
+        close = getattr(response, "close", None)
+        if callable(close):
+            try:
+                result = close()
+                if hasattr(result, "__await__"):
+                    await result
+            except Exception:
+                logger.debug("Error closing OpenAI async stream response", exc_info=True)
 
     def stream(
         self,
@@ -127,39 +239,61 @@ class OpenAIProvider(BaseProvider):
         **kwargs: Any,
     ) -> Iterator[StreamChunk]:
         client = self._get_client()
-        api_messages = self._format_messages(messages)
-
-        create_kwargs: Dict[str, Any] = {
-            "model": self.config.model,
-            "messages": api_messages,
-            "temperature": self._resolve_temperature(temperature),
-            "max_tokens": self._resolve_max_tokens(max_tokens),
-            "stream": True,
-            "stream_options": {"include_usage": True},
-        }
-        if stop_sequences:
-            create_kwargs["stop"] = stop_sequences
-        create_kwargs.update(kwargs)
+        create_kwargs = self._build_create_kwargs(
+            messages, temperature, max_tokens, stop_sequences, kwargs, stream=True
+        )
 
         try:
             response = client.chat.completions.create(**create_kwargs)
-            for chunk in response:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    yield StreamChunk(text=chunk.choices[0].delta.content)
-
-                # Final chunk with usage
-                if chunk.usage:
-                    yield StreamChunk(
-                        text="",
-                        is_final=True,
-                        usage={
-                            "prompt_tokens": chunk.usage.prompt_tokens,
-                            "completion_tokens": chunk.usage.completion_tokens,
-                            "total_tokens": chunk.usage.total_tokens,
-                        },
-                    )
         except Exception as e:
             raise self._translate_error(e)
+
+        try:
+            for chunk in response:
+                done = False
+                for stream_chunk in self._chunk_to_stream_chunks(chunk):
+                    done = done or stream_chunk.is_final
+                    yield stream_chunk
+                if done:
+                    break
+        except Exception as e:
+            raise self._translate_error(e)
+        finally:
+            # Release the HTTP response if we broke out early. Best-effort:
+            # a teardown error must not mask a successful stream.
+            self._safe_close(response)
+
+    async def astream(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        stop_sequences: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamChunk]:
+        client = self._get_async_client()
+        create_kwargs = self._build_create_kwargs(
+            messages, temperature, max_tokens, stop_sequences, kwargs, stream=True
+        )
+
+        try:
+            response = await client.chat.completions.create(**create_kwargs)
+        except Exception as e:
+            raise self._translate_error(e)
+
+        try:
+            async for chunk in response:
+                done = False
+                for stream_chunk in self._chunk_to_stream_chunks(chunk):
+                    done = done or stream_chunk.is_final
+                    yield stream_chunk
+                if done:
+                    break
+        except Exception as e:
+            raise self._translate_error(e)
+        finally:
+            await self._safe_aclose(response)
 
     def count_tokens(self, messages: Sequence[ChatMessage]) -> int:
         """Estimate tokens using tiktoken when available.
@@ -182,19 +316,32 @@ class OpenAIProvider(BaseProvider):
             return total_chars // 4
 
     def _translate_error(self, error: Exception) -> ProviderError:
-        """Translate OpenAI-specific exceptions to Felix provider errors."""
+        """Translate OpenAI-specific exceptions to Felix provider errors.
+
+        Prefers the HTTP status code carried by the SDK's typed exceptions;
+        falls back to message/type-name matching for plain exceptions.
+        """
         error_str = str(error)
         error_type = type(error).__name__
+        lowered = error_str.lower()
+        status_code = extract_status_code(error)
 
-        if "authentication" in error_str.lower() or "api_key" in error_str.lower():
-            return AuthenticationError(error_str, provider="openai")
-        if "rate_limit" in error_type.lower() or "429" in error_str:
-            return RateLimitError(error_str, provider="openai")
-        if "not_found" in error_type.lower():
-            return ModelNotFoundError(error_str, provider="openai")
-        if "context_length" in error_str.lower() or "maximum context" in error_str.lower():
-            return ContextLengthError(error_str, provider="openai")
-        return ProviderError(error_str, provider="openai")
+        if status_code in (401, 403) or "authentication" in lowered or "api_key" in lowered:
+            return AuthenticationError(error_str, provider="openai", status_code=status_code)
+        if status_code == 429 or "rate_limit" in error_type.lower() or "429" in error_str:
+            return RateLimitError(
+                error_str,
+                retry_after=extract_retry_after(error),
+                provider="openai",
+                status_code=status_code,
+            )
+        # The SDK's class is ``NotFoundError`` -> ``notfounderror`` after
+        # stripping underscores; a plain ``"not_found"`` substring never matches.
+        if status_code == 404 or "notfound" in error_type.lower().replace("_", ""):
+            return ModelNotFoundError(error_str, provider="openai", status_code=status_code)
+        if "context_length" in lowered or "maximum context" in lowered:
+            return ContextLengthError(error_str, provider="openai", status_code=status_code)
+        return ProviderError(error_str, provider="openai", status_code=status_code)
 
 
 __all__ = ["OpenAIProvider"]

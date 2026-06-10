@@ -34,7 +34,7 @@ def get_provider(provider_name: str):
         try:
             from felix_agent_sdk.providers import AnthropicProvider
 
-            return AnthropicProvider(model="claude-sonnet-4-5")
+            return AnthropicProvider(model="claude-sonnet-4-6")
         except Exception as e:
             print(f"Could not create Anthropic provider: {e}")
             return None

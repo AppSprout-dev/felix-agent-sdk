@@ -7,7 +7,7 @@ Usage:
     from felix_agent_sdk.providers import AnthropicProvider
     from felix_agent_sdk.providers import auto_detect_provider
 
-    provider = AnthropicProvider(model="claude-sonnet-4-5")
+    provider = AnthropicProvider(model="claude-sonnet-4-6")
     # or
     provider = auto_detect_provider()
 """
@@ -25,6 +25,8 @@ from felix_agent_sdk.providers.errors import (
     ModelNotFoundError,
     ProviderError,
     RateLimitError,
+    extract_retry_after,
+    extract_status_code,
 )
 from felix_agent_sdk.providers.base import BaseProvider
 from felix_agent_sdk.providers.anthropic import AnthropicProvider
@@ -53,4 +55,6 @@ __all__ = [
     "RateLimitError",
     "ModelNotFoundError",
     "ContextLengthError",
+    "extract_status_code",
+    "extract_retry_after",
 ]

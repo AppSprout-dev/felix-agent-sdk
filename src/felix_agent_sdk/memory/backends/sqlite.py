@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
+import threading
 from typing import Any, Optional
 
 from felix_agent_sdk.memory.backends.base import BaseBackend
@@ -24,9 +26,35 @@ _OP_SQL = {
     "$lte": "<=",
 }
 
+# Column/table names are interpolated into SQL (inside [..] quoting) and must
+# be plain identifiers. No anchors: fullmatch requires the *entire* string to
+# match, which rejects the trailing-newline that ``$`` would otherwise allow.
+_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _validate_identifier(name: str, context: str) -> None:
+    """Reject anything that is not a bare SQL identifier.
+
+    Identifiers are interpolated into ``[name]`` bracket quoting, so a literal
+    ``]`` is rejected explicitly (it would close the quoting and allow
+    injection). ``re.fullmatch`` rejects embedded/trailing newlines.
+
+    Raises:
+        ValueError: If *name* is not a bare identifier (letters, digits,
+            underscores; not starting with a digit) or contains ``]``.
+    """
+    if "]" in name or not _IDENTIFIER_RE.fullmatch(name):
+        raise ValueError(f"Invalid SQL identifier for {context}: {name!r}")
+
 
 class SQLiteBackend(BaseBackend):
     """SQLite-backed storage with FTS5 support.
+
+    A single connection is shared across threads; all access is serialised
+    through an internal lock, so the backend is safe for multi-threaded use
+    (though writes from many threads will contend on that lock).
+
+    Can be used as a context manager to guarantee the connection is closed.
 
     Args:
         db_path: Path to the database file, or ``":memory:"`` for an
@@ -35,21 +63,41 @@ class SQLiteBackend(BaseBackend):
 
     def __init__(self, db_path: str = ":memory:") -> None:
         self._db_path = db_path
-        self._conn = sqlite3.connect(db_path)
-        self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA foreign_keys=ON")
+        self._lock = threading.RLock()
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        try:
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA foreign_keys=ON")
+        except Exception:
+            self._conn.close()
+            raise
         self._fts_tables: set[str] = set()
         self._fts_text_cols: dict[str, list[str]] = {}
         self._initialized_tables: set[str] = set()
         self._table_columns: dict[str, set[str]] = {}
+        self._disk_columns: dict[str, set[str]] = {}
+
+    def __enter__(self) -> SQLiteBackend:
+        return self
+
+    def __exit__(self, *exc_info: Any) -> None:
+        self.close()
 
     # ------------------------------------------------------------------
     # Schema
     # ------------------------------------------------------------------
 
     def initialize(self, table: str, schema: dict[str, str]) -> None:
+        with self._lock:
+            self._initialize_locked(table, schema)
+
+    def _initialize_locked(self, table: str, schema: dict[str, str]) -> None:
         if table in self._initialized_tables:
             return
+
+        _validate_identifier(table, "table name")
+        for col_name in schema:
+            _validate_identifier(col_name, "column name")
 
         # Build column definitions from schema hints
         col_defs = ["_id TEXT PRIMARY KEY"]
@@ -87,6 +135,7 @@ class SQLiteBackend(BaseBackend):
         self._conn.commit()
         self._initialized_tables.add(table)
         self._table_columns[table] = {"_id"} | set(schema.keys())
+        self._disk_columns.pop(table, None)
 
     # ------------------------------------------------------------------
     # CRUD
@@ -105,41 +154,47 @@ class SQLiteBackend(BaseBackend):
         valid_cols = self._table_columns.get(table)
         if valid_cols:
             data_copy = {k: v for k, v in data_copy.items() if k in valid_cols}
+        else:
+            for col_name in data_copy:
+                _validate_identifier(col_name, "column name")
 
         cols = list(data_copy.keys())
         placeholders = ", ".join(["?"] * len(cols))
         col_names = ", ".join(cols)
 
-        self._conn.execute(
-            f"INSERT OR REPLACE INTO [{table}] ({col_names}) VALUES ({placeholders})",
-            [data_copy[c] for c in cols],
-        )
-
-        # Sync FTS
-        if table in self._fts_tables:
-            self._sync_fts(table, record_id, data_copy)
-
-        self._conn.commit()
-
-    def get(self, table: str, record_id: str) -> Optional[dict[str, Any]]:
-        cur = self._conn.execute(f"SELECT * FROM [{table}] WHERE _id = ?", (record_id,))
-        row = cur.fetchone()
-        if row is None:
-            return None
-        return self._row_to_dict(cur.description, row)
-
-    def delete(self, table: str, record_id: str) -> bool:
-        # Delete FTS entry first
-        if table in self._fts_tables:
-            fts_name = f"{table}_fts"
+        with self._lock:
             self._conn.execute(
-                f"DELETE FROM [{fts_name}] WHERE record_id = ?",
-                (record_id,),
+                f"INSERT OR REPLACE INTO [{table}] ({col_names}) VALUES ({placeholders})",
+                [data_copy[c] for c in cols],
             )
 
-        cur = self._conn.execute(f"DELETE FROM [{table}] WHERE _id = ?", (record_id,))
-        self._conn.commit()
-        return cur.rowcount > 0
+            # Sync FTS
+            if table in self._fts_tables:
+                self._sync_fts(table, record_id, data_copy)
+
+            self._conn.commit()
+
+    def get(self, table: str, record_id: str) -> Optional[dict[str, Any]]:
+        with self._lock:
+            cur = self._conn.execute(f"SELECT * FROM [{table}] WHERE _id = ?", (record_id,))
+            row = cur.fetchone()
+            if row is None:
+                return None
+            return self._row_to_dict(cur.description, row)
+
+    def delete(self, table: str, record_id: str) -> bool:
+        with self._lock:
+            # Delete FTS entry first
+            if table in self._fts_tables:
+                fts_name = f"{table}_fts"
+                self._conn.execute(
+                    f"DELETE FROM [{fts_name}] WHERE record_id = ?",
+                    (record_id,),
+                )
+
+            cur = self._conn.execute(f"DELETE FROM [{table}] WHERE _id = ?", (record_id,))
+            self._conn.commit()
+            return cur.rowcount > 0
 
     # ------------------------------------------------------------------
     # Query
@@ -162,8 +217,14 @@ class SQLiteBackend(BaseBackend):
             sql += " WHERE " + " AND ".join(where_parts)
 
         if order_by:
+            _validate_identifier(order_by, "order_by")
+            known_cols = self._all_columns(table)
+            if known_cols and order_by not in known_cols:
+                raise ValueError(
+                    f"Unknown order_by column {order_by!r} for table {table!r}"
+                )
             direction = "ASC" if ascending else "DESC"
-            sql += f" ORDER BY {order_by} {direction}"
+            sql += f" ORDER BY [{order_by}] {direction}"
 
         if limit is not None:
             sql += " LIMIT ?"
@@ -172,8 +233,9 @@ class SQLiteBackend(BaseBackend):
                 sql += " OFFSET ?"
                 params.append(offset)
 
-        cur = self._conn.execute(sql, params)
-        return [self._row_to_dict(cur.description, row) for row in cur.fetchall()]
+        with self._lock:
+            cur = self._conn.execute(sql, params)
+            return [self._row_to_dict(cur.description, row) for row in cur.fetchall()]
 
     def count(self, table: str, filters: Optional[dict[str, Any]] = None) -> int:
         sql = f"SELECT COUNT(*) FROM [{table}]"
@@ -183,7 +245,8 @@ class SQLiteBackend(BaseBackend):
         if where_parts:
             sql += " WHERE " + " AND ".join(where_parts)
 
-        return self._conn.execute(sql, params).fetchone()[0]
+        with self._lock:
+            return int(self._conn.execute(sql, params).fetchone()[0])
 
     def search_text(
         self,
@@ -201,11 +264,27 @@ class SQLiteBackend(BaseBackend):
     # ------------------------------------------------------------------
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _all_columns(self, table: str) -> set[str]:
+        """All known columns for *table*: session schema plus on-disk columns.
+
+        The on-disk lookup (PRAGMA table_info) covers tables created
+        out-of-band or with a wider schema than this session declared.
+        Results are cached per table.
+        """
+        cached = self._disk_columns.get(table)
+        if cached is None:
+            with self._lock:
+                cur = self._conn.execute(f"PRAGMA table_info([{table}])")
+                cached = {row[1] for row in cur.fetchall()}
+            self._disk_columns[table] = cached
+        return self._table_columns.get(table, set()) | cached
 
     @staticmethod
     def _map_type(hint: str) -> str:
@@ -226,6 +305,7 @@ class SQLiteBackend(BaseBackend):
 
         parts: list[str] = []
         for field, value in filters.items():
+            _validate_identifier(field, "filter field")
             if isinstance(value, dict):
                 # Operator filter: {"$gt": 5}
                 for op, op_val in value.items():
@@ -274,8 +354,9 @@ class SQLiteBackend(BaseBackend):
             f"WHERE [{fts_name}] MATCH ? "
             f"ORDER BY rank LIMIT ?"
         )
-        cur = self._conn.execute(sql, (query, limit))
-        return [self._row_to_dict(cur.description, row) for row in cur.fetchall()]
+        with self._lock:
+            cur = self._conn.execute(sql, (query, limit))
+            return [self._row_to_dict(cur.description, row) for row in cur.fetchall()]
 
     def _like_search(
         self,
@@ -292,8 +373,9 @@ class SQLiteBackend(BaseBackend):
         conditions = [f"{f} LIKE ?" for f in safe_fields]
         sql = f"SELECT * FROM [{table}] WHERE " + " OR ".join(conditions) + " LIMIT ?"
         params = [f"%{query}%"] * len(safe_fields) + [limit]
-        cur = self._conn.execute(sql, params)
-        return [self._row_to_dict(cur.description, row) for row in cur.fetchall()]
+        with self._lock:
+            cur = self._conn.execute(sql, params)
+            return [self._row_to_dict(cur.description, row) for row in cur.fetchall()]
 
     @staticmethod
     def _row_to_dict(description: Any, row: tuple[Any, ...]) -> dict[str, Any]:
@@ -307,7 +389,7 @@ class SQLiteBackend(BaseBackend):
                     parsed = json.loads(value)
                     if isinstance(parsed, (dict, list)):
                         value = parsed
-                except (json.JSONDecodeError, ValueError):
+                except ValueError:
                     pass
             result[col_name] = value
         return result

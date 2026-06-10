@@ -105,10 +105,13 @@ The original Felix source is at `https://github.com/CalebisGross/felix`. Key fil
 
 ## Phased Implementation
 
-- **Phase 1** (current): Package skeleton + provider layer
-- **Phase 2** `feat/core-geometry`: Port HelixGeometry, add HelixConfig/HelixPosition
-- **Phase 3** `feat/providers`: Tests for provider layer
-- **Phase 4** `feat/agents`: Port agent classes, wire to BaseProvider
-- **Phase 5** `feat/communication`: Port CentralPost, Spoke, messages
-- **Phase 6** `feat/memory`: Port KnowledgeStore, TaskMemory, ContextCompressor
-- **Phase 7** `feat/workflows`: Port workflow runner + templates
+All porting phases below are **complete** (shipped across v0.1.0–v0.2.x). Current
+work is post-port hardening, async support, and release engineering (v0.3.x).
+
+- **Phase 1** ✅: Package skeleton + provider layer
+- **Phase 2** ✅ `feat/core-geometry`: Port HelixGeometry, add HelixConfig/HelixPosition
+- **Phase 3** ✅ `feat/providers`: Tests for provider layer
+- **Phase 4** ✅ `feat/agents`: Port agent classes, wire to BaseProvider
+- **Phase 5** ✅ `feat/communication`: Port CentralPost, Spoke, messages
+- **Phase 6** ✅ `feat/memory`: Port KnowledgeStore, TaskMemory, ContextCompressor
+- **Phase 7** ✅ `feat/workflows`: Port workflow runner + templates

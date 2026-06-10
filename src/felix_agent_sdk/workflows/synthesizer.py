@@ -117,7 +117,7 @@ class WorkflowSynthesizer:
         )
         # Move to synthesis phase
         synth_agent.spawn(current_time=0.0)
-        synth_agent._progress = 1.0  # noqa: SLF001 — place at synthesis end
+        synth_agent.set_progress(1.0)  # place at synthesis end
 
         task = LLMTask(
             task_id="synthesis",

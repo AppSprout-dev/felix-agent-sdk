@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any, Dict
 
-_TEMPLATES = {
+_TEMPLATES: Dict[str, Dict[str, Any]] = {
     "research": {
         "team": [
             {"type": "research"},

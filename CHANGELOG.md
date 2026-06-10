@@ -2,6 +2,95 @@
 
 All notable changes to Felix Agent SDK will be documented in this file.
 
+## [0.3.0] — 2026-06-10
+
+Phase 3: Hardening & Async. Driven by a full-repo code review and a follow-up
+adversarial re-review from the RLE-consumer perspective.
+
+### Added
+- **Async provider interface**: `AnthropicProvider`, `OpenAIProvider`, and
+  `LocalProvider` now implement `acomplete()` and `astream()` using the
+  vendor SDKs' async clients.
+- `Agent.set_progress()` — public API to place an agent at a specific helix
+  position (replaces orchestrators poking `_progress`). Placing at `t=1.0`
+  transitions the agent to `COMPLETED`, making the placement stable across
+  subsequent position updates.
+- `HubCapacityError` (subclass of `RuntimeError`), exported from
+  `felix_agent_sdk` and `felix_agent_sdk.communication`.
+- `extract_status_code()` / `extract_retry_after()` helpers in
+  `providers.errors`; `RateLimitError.retry_after` is now populated from
+  the Retry-After header when present.
+- `SQLiteBackend` supports the context manager protocol and is now safe
+  for multi-threaded use (shared connection + internal lock).
+
+### Changed
+- **Breaking**: `CentralPost.register_agent()` raises `HubCapacityError` at
+  capacity instead of returning `None`, matching `register_agent_id()`
+  (which now raises the same subclass — `except RuntimeError` still works).
+- **Behavior**: `CentralPost` processed-message history is now bounded
+  (`message_history_limit=1000` by default); previously it grew without
+  limit. Pass `message_history_limit=None` to restore unbounded history.
+- `KnowledgeStore.add_relationship()` returns `False` instead of storing a
+  relationship when either entry is missing or soft-deleted (such
+  relationships were invisible to `get_relationships()` anyway).
+- `HelixGeometry`/`HelixConfig` `turns` is typed `float` (fractional turns
+  are geometrically valid and the YAML loader already produced floats).
+- `LLMAgent.get_position_info()` now includes `agent_type`.
+- `ProviderConfig.__repr__` masks the API key.
+- Provider error translation prefers HTTP status codes from vendor SDK
+  exceptions over message string matching; all translated errors carry
+  `status_code` when available.
+- `ProviderRegistry` detection priorities are stored per provider and
+  honored during `auto_detect()` (previously priorities were reset on
+  re-registration and ignored by detection).
+- Default Anthropic model updated to `claude-sonnet-4-6`.
+- `felix run` now prints the underlying cause when provider creation fails.
+- `SpokeManager.create_spoke(auto_connect=True)` raises `HubCapacityError`
+  when the hub is at capacity instead of silently returning a disconnected
+  spoke (the spoke is not retained on failure).
+- SQL identifier validation uses `re.fullmatch` (closing a trailing-newline
+  bypass) and explicitly rejects `]` so it cannot break out of `[..]`
+  bracket quoting.
+
+### Fixed
+- Dynamic spawning gap analysis received an empty `agent_type` for every
+  result, so type-based spawn recommendations could never trigger.
+- `SQLiteBackend.query()` interpolated `order_by` into SQL unvalidated;
+  identifiers are now strictly validated and checked against known columns
+  (session schema plus on-disk columns, so schema evolution still sorts).
+- `KnowledgeStore.get_relationships()` no longer returns relationships
+  involving soft-deleted entries.
+- OpenAI/Local `stream()`/`astream()` stop consuming only at a true terminal
+  chunk (usage with empty choices or a finish_reason), so servers that emit
+  running usage on content chunks (e.g. vLLM `continuous_usage_stats`) are no
+  longer silently truncated. A `close()` failure during stream teardown is
+  swallowed (debug-logged) instead of masking a successful stream as a
+  `ProviderError`.
+- Provider error translation maps HTTP 404 to `ModelNotFoundError`, and the
+  SDK exception class name (`NotFoundError`) is now matched correctly (the
+  previous `"not_found"` substring check could never match).
+- CentralPost async queue is created eagerly (removes a lazy-init race).
+- 32 mypy strict errors across 13 files; `mypy src/` now gates CI.
+
+### Infrastructure
+- CI: Windows + Ubuntu matrix, Python 3.10–3.14, coverage report. A dedicated
+  type-check job installs the provider SDKs (`.[all,dev]`) so mypy checks the
+  provider layer against real vendor types rather than `Any`.
+- Publish workflow verifies the release tag matches `_version.py`.
+- `types-PyYAML` added to dev dependencies; explicit `asyncio_mode = "strict"`.
+
+### Notes (behavior worth knowing)
+- Provider HTTP 403 now maps to `AuthenticationError` — a per-model permission
+  denial aborts rather than being retried as a generic error.
+- `CentralPost.register_agent` no longer substitutes `id(agent)` for an
+  empty-string `agent_id`; an empty id registers verbatim as `""`.
+- A stream that completes without the server ever sending usage emits no
+  `is_final` event (there is no terminal usage chunk to mark).
+- `extract_retry_after` reads the numeric `Retry-After` header form only;
+  `retry-after-ms` and HTTP-date forms are not yet parsed.
+
+---
+
 ## [0.2.2] — 2026-06-09
 
 ### Fixed

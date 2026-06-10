@@ -79,7 +79,7 @@ class ProviderConfig:
     """Configuration for a provider instance.
 
     Attributes:
-        model: Model identifier (e.g., "claude-sonnet-4-5", "gpt-4o").
+        model: Model identifier (e.g., "claude-sonnet-4-6", "gpt-4o").
         api_key: API key for authentication. If None, reads from environment.
         base_url: Override the default API endpoint (useful for proxies, local servers).
         max_retries: Number of retries on transient failures.
@@ -97,6 +97,16 @@ class ProviderConfig:
     default_temperature: float = 0.7
     default_max_tokens: int = 1024
     extra: Dict[str, Any] = field(default_factory=dict)
+
+    def __repr__(self) -> str:
+        """Repr with the API key masked so configs are safe to log."""
+        api_key = "***" if self.api_key else None
+        return (
+            f"{self.__class__.__name__}(model={self.model!r}, api_key={api_key!r}, "
+            f"base_url={self.base_url!r}, max_retries={self.max_retries}, "
+            f"timeout={self.timeout}, default_temperature={self.default_temperature}, "
+            f"default_max_tokens={self.default_max_tokens}, extra={self.extra!r})"
+        )
 
 
 __all__ = [

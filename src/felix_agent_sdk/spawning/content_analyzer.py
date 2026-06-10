@@ -70,8 +70,8 @@ class ContentAnalyzer:
         # A topic is "sparse" if it appears in fewer than 2 results
         topic_counts: Dict[str, int] = {}
         for kw_set in per_result_keywords:
-            for kw in kw_set:
-                topic_counts[kw] = topic_counts.get(kw, 0) + 1
+            for keyword in kw_set:
+                topic_counts[keyword] = topic_counts.get(keyword, 0) + 1
 
         sparse = {kw for kw, count in topic_counts.items() if count < 2}
         covered = all_keywords - sparse

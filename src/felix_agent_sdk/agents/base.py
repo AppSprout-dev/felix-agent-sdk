@@ -172,6 +172,33 @@ class Agent:
         if self._progress >= 1.0:
             self._state = AgentState.COMPLETED
 
+    def set_progress(self, progress: float) -> None:
+        """Place the agent directly at *progress* along the helix.
+
+        Bypasses time-based progression — used by orchestrators that need an
+        agent at a specific phase (e.g. a synthesis agent at t=1.0).
+
+        Mirrors :meth:`update_position` semantics: placing the agent at
+        ``progress >= 1.0`` transitions it to ``COMPLETED``, which also makes
+        the placement stable (completed agents are exempt from time-based
+        recomputation). Placements below 1.0 are a starting point only — a
+        later :meth:`update_position`/:meth:`get_position` call recomputes
+        progress from elapsed time.
+
+        Raises:
+            ValueError: If *progress* is outside [0, 1], or the agent has
+                not been spawned, or has already completed/failed.
+        """
+        if not (0.0 <= progress <= 1.0):
+            raise ValueError("progress must be between 0 and 1")
+        if self._state == AgentState.WAITING:
+            raise ValueError("Cannot set progress of unspawned agent")
+        if self._state in (AgentState.COMPLETED, AgentState.FAILED):
+            raise ValueError(f"Cannot set progress of {self._state.value} agent")
+        self._progress = progress
+        if progress >= 1.0:
+            self._state = AgentState.COMPLETED
+
     def get_position(self, current_time: float) -> Optional[Tuple[float, float, float]]:
         """Return (x, y, z) on the helix, or ``None`` if not yet spawned."""
         if self._state == AgentState.WAITING:

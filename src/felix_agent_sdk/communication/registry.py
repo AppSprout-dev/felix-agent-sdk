@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from felix_agent_sdk.core.helix import ANALYSIS_END, EXPLORATION_END
 
@@ -36,7 +36,7 @@ class AgentRegistry:
         # agent_id -> performance metrics dict
         self._performance: Dict[str, Dict[str, Any]] = {}
         # agent_id -> list of (influenced_agent_id, timestamp) tuples
-        self._collaborations: Dict[str, List[tuple]] = {}
+        self._collaborations: Dict[str, List[Tuple[str, float]]] = {}
         # rolling confidence window for trend calculation
         self._confidence_history: List[float] = []
 

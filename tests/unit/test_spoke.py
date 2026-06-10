@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 
 from felix_agent_sdk.communication.central_post import CentralPost
 from felix_agent_sdk.communication.messages import Message, MessageType
@@ -474,3 +475,27 @@ class TestSpokeManagerShutdown:
         r = repr(spoke_manager)
         assert "spokes=1" in r
         assert "active=1" in r
+
+
+# -------------------------------------------------------------------------
+# SpokeManager — capacity propagation
+# -------------------------------------------------------------------------
+
+
+class TestSpokeManagerCapacity:
+    def test_create_spoke_raises_at_capacity(self, central_post, spoke_manager):
+        from felix_agent_sdk.communication.central_post import HubCapacityError
+
+        # Fill the hub (fixture max_agents=10)
+        for i in range(10):
+            spoke_manager.create_spoke(f"agent-{i}")
+        with pytest.raises(HubCapacityError):
+            spoke_manager.create_spoke("overflow")
+        # The failed spoke must not be retained
+        assert spoke_manager.get_spoke("overflow") is None
+
+    def test_no_auto_connect_never_raises_at_capacity(self, central_post, spoke_manager):
+        for i in range(10):
+            spoke_manager.create_spoke(f"agent-{i}")
+        spoke = spoke_manager.create_spoke("overflow", auto_connect=False)
+        assert spoke.is_connected is False

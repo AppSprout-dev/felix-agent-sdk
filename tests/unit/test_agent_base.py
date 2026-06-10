@@ -262,3 +262,45 @@ class TestAgentRepr:
 
     def test_repr_contains_state(self, agent):
         assert "waiting" in repr(agent)
+
+
+# ---------------------------------------------------------------------------
+# set_progress
+# ---------------------------------------------------------------------------
+
+
+class TestSetProgress:
+    def test_set_progress_directly(self, agent):
+        agent.spawn(0.2)
+        agent.set_progress(0.5)
+        assert agent.progress == 0.5
+
+    def test_set_progress_one_completes_agent(self, agent):
+        """Placing at t=1.0 mirrors update_position: agent completes."""
+        agent.spawn(0.2)
+        agent.set_progress(1.0)
+        assert agent.progress == 1.0
+        assert agent.state == AgentState.COMPLETED
+
+    def test_set_progress_one_is_stable_across_position_queries(self, agent):
+        """Regression: time-based recomputation must not clobber a t=1.0
+        placement on the next get_position call."""
+        agent.spawn(0.2)
+        agent.set_progress(1.0)
+        agent.get_position(0.3)
+        assert agent.progress == 1.0
+
+    def test_set_progress_validates_range(self, agent):
+        agent.spawn(0.2)
+        with pytest.raises(ValueError, match="between 0 and 1"):
+            agent.set_progress(1.5)
+
+    def test_set_progress_requires_spawn(self, agent):
+        with pytest.raises(ValueError, match="unspawned"):
+            agent.set_progress(0.5)
+
+    def test_set_progress_rejects_completed_agent(self, agent):
+        agent.spawn(0.2)
+        agent.set_progress(1.0)
+        with pytest.raises(ValueError, match="completed"):
+            agent.set_progress(0.2)

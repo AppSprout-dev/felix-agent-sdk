@@ -162,11 +162,11 @@ class TestYamlLoader:
         path = self._write_yaml(tmp_path, {
             "task": "Test",
             "provider": "anthropic",
-            "model": "claude-sonnet-4-5",
+            "model": "claude-sonnet-4-6",
         })
         _, _, info = load_workflow_yaml(path)
         assert info["provider"] == "anthropic"
-        assert info["model"] == "claude-sonnet-4-5"
+        assert info["model"] == "claude-sonnet-4-6"
 
     def test_missing_task_raises(self, tmp_path):
         path = self._write_yaml(tmp_path, {"helix": "default"})
@@ -204,3 +204,29 @@ class TestInitRunRoundTrip:
         assert task is not None
         assert len(config.team_composition) > 0
         assert info["provider"] == "openai"
+
+
+class TestResolveProviderErrorSurfacing:
+    def test_provider_failure_cause_printed_to_stderr(self, monkeypatch, capsys):
+        """Regression: provider creation failures must surface their cause,
+        not be silently swallowed."""
+        import felix_agent_sdk.providers as providers_pkg
+        from felix_agent_sdk.cli.run_command import _resolve_provider
+
+        def boom(**kwargs):
+            raise RuntimeError("no api key configured")
+
+        monkeypatch.setattr(providers_pkg, "OpenAIProvider", boom)
+        assert _resolve_provider("openai", "") is None
+        assert "no api key configured" in capsys.readouterr().err
+
+    def test_auto_detect_failure_cause_printed_to_stderr(self, monkeypatch, capsys):
+        import felix_agent_sdk.providers as providers_pkg
+        from felix_agent_sdk.cli.run_command import _resolve_provider
+
+        def boom():
+            raise RuntimeError("detection exploded")
+
+        monkeypatch.setattr(providers_pkg, "auto_detect_provider", boom)
+        assert _resolve_provider("auto", "") is None
+        assert "detection exploded" in capsys.readouterr().err

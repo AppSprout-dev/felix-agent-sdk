@@ -24,11 +24,16 @@ class BaseProvider(ABC):
     - acomplete(): Async completion
     - astream(): Async streaming completion
     - validate(): Test connectivity and authentication
+
+    The built-in Anthropic, OpenAI, and Local providers implement the async
+    interface; the base-class defaults raise NotImplementedError so custom
+    sync-only providers remain valid.
     """
 
     def __init__(self, config: ProviderConfig):
         self.config = config
         self._client: Optional[Any] = None  # Lazy-initialized provider client
+        self._async_client: Optional[Any] = None  # Lazy-initialized async client
 
     @property
     def model(self) -> str:
@@ -151,7 +156,11 @@ class BaseProvider(ABC):
         """Test that the provider is correctly configured and reachable.
 
         Returns True if a test request succeeds, False otherwise.
-        Implementations should make a lightweight API call (e.g., list models).
+
+        Note: the default implementation issues a real (tiny, max 5 tokens)
+        completion request, which consumes API credits. Providers with a
+        cheaper health check (e.g. a model-list endpoint) should override
+        this — see :class:`LocalProvider`.
         """
         try:
             result = self.complete(
