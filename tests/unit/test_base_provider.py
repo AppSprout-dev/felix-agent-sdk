@@ -218,3 +218,23 @@ class TestLazyClient:
     def test_client_initially_none(self):
         p = StubProvider()
         assert p._client is None
+
+
+# ---------------------------------------------------------------------------
+# ProviderConfig repr masking
+# ---------------------------------------------------------------------------
+
+
+class TestProviderConfigRepr:
+    def test_api_key_masked_in_repr(self):
+        config = ProviderConfig(model="m", api_key="sk-super-secret")
+        assert "sk-super-secret" not in repr(config)
+        assert "***" in repr(config)
+
+    def test_none_api_key_shown_as_none(self):
+        config = ProviderConfig(model="m")
+        assert "api_key=None" in repr(config)
+
+    def test_repr_still_shows_model(self):
+        config = ProviderConfig(model="gpt-4o", api_key="secret")
+        assert "gpt-4o" in repr(config)

@@ -50,10 +50,42 @@ class ContextLengthError(ProviderError):
     pass
 
 
+def extract_status_code(error: Exception) -> Optional[int]:
+    """Pull an HTTP status code off a vendor SDK exception, if present.
+
+    Both the ``anthropic`` and ``openai`` SDKs expose ``status_code`` on
+    their ``APIStatusError`` hierarchy.
+    """
+    code = getattr(error, "status_code", None)
+    return code if isinstance(code, int) else None
+
+
+def extract_retry_after(error: Exception) -> Optional[float]:
+    """Pull a Retry-After value (seconds) off a vendor SDK exception.
+
+    Vendor SDK status errors carry the httpx response; the header is
+    optional and may be a date string, in which case None is returned.
+    """
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    try:
+        value = headers.get("retry-after")
+    except (AttributeError, TypeError):
+        return None
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 __all__ = [
     "ProviderError",
     "AuthenticationError",
     "RateLimitError",
     "ModelNotFoundError",
     "ContextLengthError",
+    "extract_status_code",
+    "extract_retry_after",
 ]

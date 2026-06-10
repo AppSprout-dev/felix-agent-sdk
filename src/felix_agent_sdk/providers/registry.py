@@ -32,7 +32,15 @@ class ProviderRegistry:
     """
 
     _providers: Dict[str, type[BaseProvider]] = {}
-    _detection_order: List[str] = []
+    _detection_priorities: Dict[str, int] = {}
+
+    # Environment variables consulted during auto-detection, by provider name.
+    _DETECTION_ENV_VARS: Dict[str, str] = {
+        "anthropic": "ANTHROPIC_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "bedrock": "AWS_ACCESS_KEY_ID",
+        "vertex": "GOOGLE_APPLICATION_CREDENTIALS",
+    }
 
     @classmethod
     def register(
@@ -51,12 +59,13 @@ class ProviderRegistry:
         if not issubclass(provider_class, BaseProvider):
             raise TypeError(f"{provider_class} must inherit from BaseProvider")
         cls._providers[name] = provider_class
-        # Maintain sorted detection order
-        cls._detection_order.append(name)
-        cls._detection_order.sort(
-            key=lambda n: detection_priority if n == name else 100
-        )
+        cls._detection_priorities[name] = detection_priority
         logger.debug(f"Registered provider: {name}")
+
+    @classmethod
+    def _detection_order(cls) -> List[str]:
+        """Registered provider names sorted by detection priority (low first)."""
+        return sorted(cls._providers, key=lambda n: cls._detection_priorities.get(n, 100))
 
     @classmethod
     def get(cls, name: str) -> type[BaseProvider]:
@@ -101,16 +110,10 @@ class ProviderRegistry:
             kwargs: Dict[str, Any] = {"model": model} if model else {}
             return provider_class(**kwargs)
 
-        # Auto-detect from available keys
-        detection_map = {
-            "anthropic": "ANTHROPIC_API_KEY",
-            "openai": "OPENAI_API_KEY",
-            "bedrock": "AWS_ACCESS_KEY_ID",
-            "vertex": "GOOGLE_APPLICATION_CREDENTIALS",
-        }
-
-        for provider_name, env_var in detection_map.items():
-            if os.getenv(env_var) and provider_name in cls._providers:
+        # Auto-detect from available keys, honoring registration priority
+        for provider_name in cls._detection_order():
+            env_var = cls._DETECTION_ENV_VARS.get(provider_name)
+            if env_var and os.getenv(env_var):
                 model = os.getenv("FELIX_MODEL")
                 provider_class = cls._providers[provider_name]
                 kwargs = {"model": model} if model else {}

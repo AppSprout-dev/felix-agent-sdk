@@ -521,3 +521,128 @@ class TestAnthropicErrorPropagation:
         p._client.messages.stream.side_effect = Exception("Error 429: rate limit exceeded")
         with pytest.raises(RateLimitError):
             list(p.stream([user_message]))
+
+
+# ---------------------------------------------------------------------------
+# Status-code / retry-after aware error translation
+# ---------------------------------------------------------------------------
+
+
+def _status_error(message, status_code, retry_after=None):
+    """Mimic a vendor SDK APIStatusError carrying status_code and response."""
+    err = Exception(message)
+    err.status_code = status_code
+    headers = {}
+    if retry_after is not None:
+        headers["retry-after"] = retry_after
+    response = MagicMock()
+    response.headers = headers
+    err.response = response
+    return err
+
+
+class TestAnthropicTypedErrorTranslation:
+    def test_status_401_maps_to_authentication(self):
+        p = _make_provider()
+        result = p._translate_error(_status_error("nope", 401))
+        assert isinstance(result, AuthenticationError)
+        assert result.status_code == 401
+
+    def test_status_429_maps_to_rate_limit_with_retry_after(self):
+        p = _make_provider()
+        result = p._translate_error(_status_error("slow down", 429, retry_after="1.5"))
+        assert isinstance(result, RateLimitError)
+        assert result.status_code == 429
+        assert result.retry_after == 1.5
+
+    def test_generic_error_carries_status_code(self):
+        p = _make_provider()
+        result = p._translate_error(_status_error("boom", 500))
+        assert isinstance(result, ProviderError)
+        assert result.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# Async interface
+# ---------------------------------------------------------------------------
+
+
+class _AsyncTextStream:
+    def __init__(self, texts):
+        self._texts = list(texts)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._texts:
+            raise StopAsyncIteration
+        return self._texts.pop(0)
+
+
+class _MockAsyncMessageStream:
+    """Mimics anthropic's AsyncMessageStream context manager."""
+
+    def __init__(self, texts, final_message):
+        self.text_stream = _AsyncTextStream(texts)
+        self._final = final_message
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+    async def get_final_message(self):
+        return self._final
+
+
+class TestAnthropicAsync:
+    @pytest.mark.asyncio
+    async def test_acomplete_returns_completion_result(self, user_message):
+        from unittest.mock import AsyncMock
+
+        p = _make_provider()
+        p._async_client = MagicMock()
+        p._async_client.messages.create = AsyncMock(return_value=_mock_response())
+
+        result = await p.acomplete([user_message])
+        assert isinstance(result, CompletionResult)
+        assert result.content == "Hello!"
+        assert result.usage["total_tokens"] == 15
+
+    @pytest.mark.asyncio
+    async def test_astream_yields_chunks_with_final_usage(self, user_message):
+        p = _make_provider()
+        p._async_client = MagicMock()
+        p._async_client.messages.stream.return_value = _MockAsyncMessageStream(
+            ["Hello", " world"], _mock_response(input_tokens=12, output_tokens=6)
+        )
+
+        out = [chunk async for chunk in p.astream([user_message])]
+        texts = [c.text for c in out if not c.is_final]
+        assert texts == ["Hello", " world"]
+        assert out[-1].is_final is True
+        assert out[-1].usage["total_tokens"] == 18
+
+    @pytest.mark.asyncio
+    async def test_acomplete_translates_errors(self, user_message):
+        from unittest.mock import AsyncMock
+
+        p = _make_provider()
+        p._async_client = MagicMock()
+        p._async_client.messages.create = AsyncMock(
+            side_effect=Exception("authentication failed")
+        )
+        with pytest.raises(AuthenticationError):
+            await p.acomplete([user_message])
+
+    def test_async_client_created_once(self):
+        mock_mod = MagicMock()
+        mock_mod.AsyncAnthropic.return_value = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": mock_mod}):
+            p = AnthropicProvider(api_key="k")
+            c1 = p._get_async_client()
+            c2 = p._get_async_client()
+            assert c1 is c2
+            mock_mod.AsyncAnthropic.assert_called_once()
