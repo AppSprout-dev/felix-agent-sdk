@@ -95,10 +95,10 @@ class CentralPost:
         self._total_messages_processed: int = 0
 
         # Async message queue (lazy — created on first async use)
-        self._async_queue: Optional[asyncio.Queue] = None  # type: ignore[type-arg]
+        self._async_queue: Optional[asyncio.Queue[Message]] = None
 
         # Lifecycle callbacks: event -> list of callables
-        self._lifecycle_callbacks: Dict[AgentLifecycleEvent, List[Callable]] = {
+        self._lifecycle_callbacks: Dict[AgentLifecycleEvent, List[Callable[[str], None]]] = {
             event: [] for event in AgentLifecycleEvent
         }
 
@@ -264,7 +264,7 @@ class CentralPost:
     # Async message queue
     # ------------------------------------------------------------------
 
-    def _ensure_async_queue(self) -> asyncio.Queue:  # type: ignore[type-arg]
+    def _ensure_async_queue(self) -> asyncio.Queue[Message]:
         """Lazily create the async queue on first use."""
         if self._async_queue is None:
             self._async_queue = asyncio.Queue()

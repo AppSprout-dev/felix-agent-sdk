@@ -6,7 +6,7 @@ Requires: pip install felix-agent-sdk[anthropic]
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from .base import BaseProvider
 from .errors import (
@@ -58,7 +58,7 @@ class AnthropicProvider(BaseProvider):
         )
         super().__init__(config)
 
-    def _get_client(self):
+    def _get_client(self) -> Any:
         """Lazy-initialize the Anthropic client."""
         if self._client is None:
             try:
@@ -68,7 +68,7 @@ class AnthropicProvider(BaseProvider):
                     "Anthropic provider requires the 'anthropic' package. "
                     "Install with: pip install felix-agent-sdk[anthropic]"
                 )
-            client_kwargs = {}
+            client_kwargs: Dict[str, Any] = {}
             if self.config.api_key:
                 client_kwargs["api_key"] = self.config.api_key
             if self.config.base_url:
@@ -82,14 +82,16 @@ class AnthropicProvider(BaseProvider):
         """Whether the configured model accepts temperature/top_p/top_k."""
         return not self.config.model.startswith(self._SAMPLING_UNSUPPORTED_PREFIXES)
 
-    def _format_messages(self, messages: Sequence[ChatMessage]):
+    def _format_messages(
+        self, messages: Sequence[ChatMessage]
+    ) -> Tuple[Optional[str], List[Dict[str, str]]]:
         """Convert ChatMessages to Anthropic's format.
 
         Anthropic uses a separate 'system' parameter rather than a system message
         in the messages list, so we extract it here.
         """
-        system_content = None
-        api_messages = []
+        system_content: Optional[str] = None
+        api_messages: List[Dict[str, str]] = []
         for msg in messages:
             if msg.role == MessageRole.SYSTEM:
                 system_content = msg.content
@@ -199,7 +201,7 @@ class AnthropicProvider(BaseProvider):
                 model=self.config.model,
                 messages=api_messages,
             )
-            return response.input_tokens
+            return int(response.input_tokens)
         except Exception:
             # Fallback: rough approximation
             total_chars = sum(len(m.content) for m in messages)

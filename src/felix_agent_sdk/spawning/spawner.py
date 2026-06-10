@@ -118,7 +118,7 @@ class DynamicSpawner(EventEmitterMixin):
             spawn_time=spawn_time,
         )
         if getattr(self, "_event_bus", None) is not None:
-            agent.set_event_bus(self._event_bus)  # type: ignore[arg-type]
+            agent.set_event_bus(self._event_bus)
         self._spoke_mgr.create_spoke(agent.agent_id, agent=agent)
         self._total_spawned += 1
 

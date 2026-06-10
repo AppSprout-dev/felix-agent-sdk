@@ -183,7 +183,7 @@ class SQLiteBackend(BaseBackend):
         if where_parts:
             sql += " WHERE " + " AND ".join(where_parts)
 
-        return self._conn.execute(sql, params).fetchone()[0]
+        return int(self._conn.execute(sql, params).fetchone()[0])
 
     def search_text(
         self,

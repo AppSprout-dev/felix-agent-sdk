@@ -40,14 +40,15 @@ class EventEmitterMixin:
             data: Arbitrary payload dict.
             source: Override the default source identifier.
         """
-        if getattr(self, "_event_bus", None) is None:
+        bus = getattr(self, "_event_bus", None)
+        if bus is None:
             return
         event = FelixEvent(
             event_type=event_type,
             source=source or self._default_event_source(),
             data=data or {},
         )
-        self._event_bus.emit(event)
+        bus.emit(event)
 
     def _default_event_source(self) -> str:
         """Return a default source string. Override for richer identification."""

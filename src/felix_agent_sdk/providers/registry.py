@@ -31,11 +31,16 @@ class ProviderRegistry:
         LOCAL_BASE_URL: Local server URL
     """
 
-    _providers: Dict[str, type] = {}
+    _providers: Dict[str, type[BaseProvider]] = {}
     _detection_order: List[str] = []
 
     @classmethod
-    def register(cls, name: str, provider_class: type, detection_priority: int = 100) -> None:
+    def register(
+        cls,
+        name: str,
+        provider_class: type[BaseProvider],
+        detection_priority: int = 100,
+    ) -> None:
         """Register a provider class.
 
         Args:
@@ -54,7 +59,7 @@ class ProviderRegistry:
         logger.debug(f"Registered provider: {name}")
 
     @classmethod
-    def get(cls, name: str) -> type:
+    def get(cls, name: str) -> type[BaseProvider]:
         """Get a provider class by name.
 
         Raises:
@@ -117,8 +122,8 @@ class ProviderRegistry:
         # Fall back to local
         if "local" in cls._providers:
             logger.info("No cloud API keys found, falling back to local provider")
-            model_name = os.getenv("FELIX_MODEL", "local-model")
-            return cls._providers["local"](model=model_name)
+            local_kwargs: Dict[str, Any] = {"model": os.getenv("FELIX_MODEL", "local-model")}
+            return cls._providers["local"](**local_kwargs)
 
         raise ProviderError(
             "No provider could be auto-detected. Set FELIX_PROVIDER or "

@@ -27,9 +27,15 @@ class RateLimitError(ProviderError):
         retry_after: Suggested wait time in seconds before retrying.
     """
 
-    def __init__(self, message: str, retry_after: Optional[float] = None, **kwargs):  # type: ignore[override]
+    def __init__(
+        self,
+        message: str,
+        retry_after: Optional[float] = None,
+        provider: str = "",
+        status_code: Optional[int] = None,
+    ):
         self.retry_after = retry_after
-        super().__init__(message, **kwargs)
+        super().__init__(message, provider=provider, status_code=status_code)
 
 
 class ModelNotFoundError(ProviderError):

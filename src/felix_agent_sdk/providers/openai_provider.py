@@ -53,7 +53,7 @@ class OpenAIProvider(BaseProvider):
         )
         super().__init__(config)
 
-    def _get_client(self):
+    def _get_client(self) -> Any:
         """Lazy-initialize the OpenAI client."""
         if self._client is None:
             try:
