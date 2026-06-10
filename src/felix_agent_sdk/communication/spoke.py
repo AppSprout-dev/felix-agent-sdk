@@ -16,6 +16,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
+from felix_agent_sdk.communication.central_post import HubCapacityError
 from felix_agent_sdk.communication.messages import Message, MessageType
 
 if TYPE_CHECKING:
@@ -140,18 +141,15 @@ class Spoke:
         if self._is_connected:
             return True
 
-        if self._agent is not None:
-            result = self._hub.register_agent(self._agent, metadata)
-        else:
-            try:
-                result = self._hub.register_agent_id(self._agent_id, metadata)
-            except RuntimeError:
-                logger.warning(
-                    "Spoke.connect: hub at capacity, could not register %s", self._agent_id
-                )
-                return False
-
-        if result is None:
+        try:
+            if self._agent is not None:
+                self._hub.register_agent(self._agent, metadata)
+            else:
+                self._hub.register_agent_id(self._agent_id, metadata)
+        except HubCapacityError:
+            logger.warning(
+                "Spoke.connect: hub at capacity, could not register %s", self._agent_id
+            )
             return False
 
         self._is_connected = True

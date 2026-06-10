@@ -9,6 +9,7 @@ import pytest
 from felix_agent_sdk.communication.central_post import (
     AgentLifecycleEvent,
     CentralPost,
+    HubCapacityError,
 )
 from felix_agent_sdk.communication.messages import Message, MessageType
 from felix_agent_sdk.communication.registry import AgentRegistry
@@ -101,15 +102,19 @@ class TestAgentRegistrationObject:
         central_post.register_agent(agent, metadata={"priority": "high"})
         assert central_post.is_agent_registered("agent-001")
 
-    def test_register_at_capacity_returns_none(self, central_post):
+    def test_register_at_capacity_raises(self, central_post):
         # Fill to capacity (max_agents=10)
         for i in range(10):
             agent = _make_mock_agent(f"agent-{i:03d}")
             central_post.register_agent(agent)
-        # 11th registration should fail
+        # 11th registration should fail consistently with register_agent_id
         overflow_agent = _make_mock_agent("overflow")
-        result = central_post.register_agent(overflow_agent)
-        assert result is None
+        with pytest.raises(HubCapacityError, match="at capacity"):
+            central_post.register_agent(overflow_agent)
+
+    def test_capacity_error_is_runtime_error(self, central_post):
+        """Backward compat: pre-0.3.0 callers caught RuntimeError."""
+        assert issubclass(HubCapacityError, RuntimeError)
 
     def test_re_register_same_agent_succeeds(self, central_post):
         """Re-registering an already registered agent updates, doesn't fail."""
@@ -251,6 +256,19 @@ class TestMessageProcessing:
         )
         assert len(status_msgs) == 1
         assert status_msgs[0].message_type == MessageType.STATUS_UPDATE
+
+    def test_message_history_is_bounded(self):
+        hub = CentralPost(max_agents=5, message_history_limit=3)
+        for i in range(5):
+            hub.queue_message(_make_message(sender_id=f"agent-{i}"))
+            hub.process_next_message()
+        recent = hub.get_recent_messages(count=10)
+        assert len(recent) == 3
+        # Oldest messages evicted, most recent retained
+        assert [m.sender_id for m in recent] == ["agent-2", "agent-3", "agent-4"]
+        # Counter is not affected by eviction
+        assert hub.total_messages_processed == 5
+        hub.shutdown()
 
     def test_status_update_handler_updates_registry(self, central_post):
         central_post.register_agent_id("agent-1")
