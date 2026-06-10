@@ -26,18 +26,24 @@ _OP_SQL = {
     "$lte": "<=",
 }
 
-# Column/table names are interpolated into SQL and must be plain identifiers.
-_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# Column/table names are interpolated into SQL (inside [..] quoting) and must
+# be plain identifiers. No anchors: fullmatch requires the *entire* string to
+# match, which rejects the trailing-newline that ``$`` would otherwise allow.
+_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 def _validate_identifier(name: str, context: str) -> None:
     """Reject anything that is not a bare SQL identifier.
 
+    Identifiers are interpolated into ``[name]`` bracket quoting, so a literal
+    ``]`` is rejected explicitly (it would close the quoting and allow
+    injection). ``re.fullmatch`` rejects embedded/trailing newlines.
+
     Raises:
-        ValueError: If *name* contains characters outside [A-Za-z0-9_]
-            or does not start with a letter/underscore.
+        ValueError: If *name* is not a bare identifier (letters, digits,
+            underscores; not starting with a digit) or contains ``]``.
     """
-    if not _IDENTIFIER_RE.match(name):
+    if "]" in name or not _IDENTIFIER_RE.fullmatch(name):
         raise ValueError(f"Invalid SQL identifier for {context}: {name!r}")
 
 

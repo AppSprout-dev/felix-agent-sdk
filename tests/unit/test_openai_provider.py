@@ -719,3 +719,55 @@ class TestOpenAIAstreamTermination:
         out = [c async for c in p.astream([user_message])]
         assert out[-1].is_final is True
         assert poisoned not in consumed
+
+
+class TestOpenAIModelNotFoundTranslation:
+    def test_status_404_maps_to_model_not_found(self):
+        p = _make_provider()
+        result = p._translate_error(_status_error("missing", 404))
+        assert isinstance(result, ModelNotFoundError)
+        assert result.status_code == 404
+
+    def test_sdk_notfounderror_class_name_maps(self):
+        """Regression: 'not_found' substring never matched the SDK's
+        NotFoundError class name."""
+        p = _make_provider()
+
+        class NotFoundError(Exception):
+            pass
+
+        result = p._translate_error(NotFoundError("model gone"))
+        assert isinstance(result, ModelNotFoundError)
+
+
+class _ClosableStream:
+    """Iterable stream whose close() raises, mimicking a teardown failure."""
+
+    def __init__(self, chunks, raise_on_close=True):
+        self._chunks = list(chunks)
+        self._raise_on_close = raise_on_close
+        self.closed = False
+
+    def __iter__(self):
+        return iter(self._chunks)
+
+    def close(self):
+        self.closed = True
+        if self._raise_on_close:
+            raise RuntimeError("connection reset during teardown")
+
+
+class TestOpenAIStreamCloseErrors:
+    def test_close_failure_does_not_mask_successful_stream(self, user_message):
+        """A close() raising after the final chunk must not turn a complete
+        stream into a ProviderError."""
+        p = _make_provider()
+        final = MagicMock()
+        final.choices = []
+        final.usage = _usage()
+        stream = _ClosableStream([_content_chunk("hi"), final])
+        p._client.chat.completions.create.return_value = stream
+
+        out = list(p.stream([user_message]))  # must not raise
+        assert out[-1].is_final is True
+        assert stream.closed is True

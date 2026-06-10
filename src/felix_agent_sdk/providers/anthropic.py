@@ -293,11 +293,15 @@ class AnthropicProvider(BaseProvider):
             return ContextLengthError(error_str, provider="anthropic", status_code=status_code)
         # Bare "model" in the message is not enough: param-rejection 400s
         # ("temperature is not supported on this model") must stay generic.
-        if "notfound" in error_type.lower().replace("_", "") or (
-            "model" in lowered
-            and any(
-                phrase in lowered
-                for phrase in ("not exist", "not found", "not available", "unknown")
+        if (
+            status_code == 404
+            or "notfound" in error_type.lower().replace("_", "")
+            or (
+                "model" in lowered
+                and any(
+                    phrase in lowered
+                    for phrase in ("not exist", "not found", "not available", "unknown")
+                )
             )
         ):
             return ModelNotFoundError(error_str, provider="anthropic", status_code=status_code)

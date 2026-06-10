@@ -2,9 +2,10 @@
 
 All notable changes to Felix Agent SDK will be documented in this file.
 
-## [0.3.0] — 2026-06-09
+## [0.3.0] — 2026-06-10
 
-Phase 3: Hardening & Async. Driven by a full-repo code review.
+Phase 3: Hardening & Async. Driven by a full-repo code review and a follow-up
+adversarial re-review from the RLE-consumer perspective.
 
 ### Added
 - **Async provider interface**: `AnthropicProvider`, `OpenAIProvider`, and
@@ -44,22 +45,49 @@ Phase 3: Hardening & Async. Driven by a full-repo code review.
   re-registration and ignored by detection).
 - Default Anthropic model updated to `claude-sonnet-4-6`.
 - `felix run` now prints the underlying cause when provider creation fails.
+- `SpokeManager.create_spoke(auto_connect=True)` raises `HubCapacityError`
+  when the hub is at capacity instead of silently returning a disconnected
+  spoke (the spoke is not retained on failure).
+- SQL identifier validation uses `re.fullmatch` (closing a trailing-newline
+  bypass) and explicitly rejects `]` so it cannot break out of `[..]`
+  bracket quoting.
 
 ### Fixed
 - Dynamic spawning gap analysis received an empty `agent_type` for every
   result, so type-based spawn recommendations could never trigger.
 - `SQLiteBackend.query()` interpolated `order_by` into SQL unvalidated;
-  identifiers are now strictly validated and checked against known columns.
+  identifiers are now strictly validated and checked against known columns
+  (session schema plus on-disk columns, so schema evolution still sorts).
 - `KnowledgeStore.get_relationships()` no longer returns relationships
   involving soft-deleted entries.
-- OpenAI `stream()` stops consuming after the final usage chunk.
+- OpenAI/Local `stream()`/`astream()` stop consuming only at a true terminal
+  chunk (usage with empty choices or a finish_reason), so servers that emit
+  running usage on content chunks (e.g. vLLM `continuous_usage_stats`) are no
+  longer silently truncated. A `close()` failure during stream teardown is
+  swallowed (debug-logged) instead of masking a successful stream as a
+  `ProviderError`.
+- Provider error translation maps HTTP 404 to `ModelNotFoundError`, and the
+  SDK exception class name (`NotFoundError`) is now matched correctly (the
+  previous `"not_found"` substring check could never match).
 - CentralPost async queue is created eagerly (removes a lazy-init race).
 - 32 mypy strict errors across 13 files; `mypy src/` now gates CI.
 
 ### Infrastructure
-- CI: Windows + Ubuntu matrix, Python 3.10–3.13, mypy gate, coverage report.
+- CI: Windows + Ubuntu matrix, Python 3.10–3.14, coverage report. A dedicated
+  type-check job installs the provider SDKs (`.[all,dev]`) so mypy checks the
+  provider layer against real vendor types rather than `Any`.
 - Publish workflow verifies the release tag matches `_version.py`.
 - `types-PyYAML` added to dev dependencies; explicit `asyncio_mode = "strict"`.
+
+### Notes (behavior worth knowing)
+- Provider HTTP 403 now maps to `AuthenticationError` — a per-model permission
+  denial aborts rather than being retried as a generic error.
+- `CentralPost.register_agent` no longer substitutes `id(agent)` for an
+  empty-string `agent_id`; an empty id registers verbatim as `""`.
+- A stream that completes without the server ever sending usage emits no
+  `is_final` event (there is no terminal usage chunk to mark).
+- `extract_retry_after` reads the numeric `Retry-After` header form only;
+  `retry-after-ms` and HTTP-date forms are not yet parsed.
 
 ---
 

@@ -646,3 +646,73 @@ class TestAnthropicAsync:
             c2 = p._get_async_client()
             assert c1 is c2
             mock_mod.AsyncAnthropic.assert_called_once()
+
+
+class TestAnthropicAsyncSamplingGate:
+    """The Fable/Opus-4.7+ sampling gate must hold on the async paths too —
+    RLE's Fable runs depend on temperature never reaching the API."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "model",
+        ["claude-fable-5", "claude-opus-4-7", "claude-opus-4-8"],
+    )
+    async def test_acomplete_omits_temperature_for_no_sampling_models(
+        self, user_message, model
+    ):
+        from unittest.mock import AsyncMock
+
+        p = _make_provider(model=model)
+        p._async_client = MagicMock()
+        p._async_client.messages.create = AsyncMock(return_value=_mock_response())
+
+        await p.acomplete([user_message], temperature=0.5)
+        call_kwargs = p._async_client.messages.create.call_args[1]
+        assert "temperature" not in call_kwargs
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "model",
+        ["claude-fable-5", "claude-opus-4-7", "claude-opus-4-8"],
+    )
+    async def test_astream_omits_temperature_for_no_sampling_models(
+        self, user_message, model
+    ):
+        p = _make_provider(model=model)
+        p._async_client = MagicMock()
+        p._async_client.messages.stream.return_value = _MockAsyncMessageStream(
+            [], _mock_response()
+        )
+
+        [chunk async for chunk in p.astream([user_message], temperature=0.5)]
+        call_kwargs = p._async_client.messages.stream.call_args[1]
+        assert "temperature" not in call_kwargs
+
+    @pytest.mark.asyncio
+    async def test_acomplete_keeps_temperature_for_sampling_models(self, user_message):
+        from unittest.mock import AsyncMock
+
+        p = _make_provider(model="claude-sonnet-4-6")
+        p._async_client = MagicMock()
+        p._async_client.messages.create = AsyncMock(return_value=_mock_response())
+
+        await p.acomplete([user_message], temperature=0.5)
+        call_kwargs = p._async_client.messages.create.call_args[1]
+        assert call_kwargs["temperature"] == 0.5
+
+
+class TestAnthropicModelNotFoundTranslation:
+    def test_status_404_maps_to_model_not_found(self):
+        p = _make_provider()
+        result = p._translate_error(_status_error("missing", 404))
+        assert isinstance(result, ModelNotFoundError)
+        assert result.status_code == 404
+
+    def test_sdk_notfounderror_class_name_maps(self):
+        p = _make_provider()
+
+        class NotFoundError(Exception):
+            pass
+
+        result = p._translate_error(NotFoundError("the model is gone"))
+        assert isinstance(result, ModelNotFoundError)

@@ -8,6 +8,7 @@ shadowing the openai package import within this module.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Sequence
 
@@ -22,6 +23,8 @@ from .errors import (
     extract_status_code,
 )
 from .types import ChatMessage, CompletionResult, ProviderConfig, StreamChunk
+
+logger = logging.getLogger("felix.providers")
 
 
 class OpenAIProvider(BaseProvider):
@@ -198,6 +201,34 @@ class OpenAIProvider(BaseProvider):
         except Exception as e:
             raise self._translate_error(e)
 
+    @staticmethod
+    def _safe_close(response: Any) -> None:
+        """Best-effort release of a stream's HTTP response.
+
+        Teardown errors must never surface: a close() failure after the
+        stream has already yielded its content would otherwise be caught by
+        the surrounding translate-error handler and turn a fully successful
+        stream into a ProviderError.
+        """
+        close = getattr(response, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                logger.debug("Error closing OpenAI stream response", exc_info=True)
+
+    @staticmethod
+    async def _safe_aclose(response: Any) -> None:
+        """Async counterpart of :meth:`_safe_close`."""
+        close = getattr(response, "close", None)
+        if callable(close):
+            try:
+                result = close()
+                if hasattr(result, "__await__"):
+                    await result
+            except Exception:
+                logger.debug("Error closing OpenAI async stream response", exc_info=True)
+
     def stream(
         self,
         messages: Sequence[ChatMessage],
@@ -214,21 +245,23 @@ class OpenAIProvider(BaseProvider):
 
         try:
             response = client.chat.completions.create(**create_kwargs)
-            try:
-                for chunk in response:
-                    done = False
-                    for stream_chunk in self._chunk_to_stream_chunks(chunk):
-                        done = done or stream_chunk.is_final
-                        yield stream_chunk
-                    if done:
-                        break
-            finally:
-                # Release the HTTP response if we broke out early
-                close = getattr(response, "close", None)
-                if callable(close):
-                    close()
         except Exception as e:
             raise self._translate_error(e)
+
+        try:
+            for chunk in response:
+                done = False
+                for stream_chunk in self._chunk_to_stream_chunks(chunk):
+                    done = done or stream_chunk.is_final
+                    yield stream_chunk
+                if done:
+                    break
+        except Exception as e:
+            raise self._translate_error(e)
+        finally:
+            # Release the HTTP response if we broke out early. Best-effort:
+            # a teardown error must not mask a successful stream.
+            self._safe_close(response)
 
     async def astream(
         self,
@@ -246,23 +279,21 @@ class OpenAIProvider(BaseProvider):
 
         try:
             response = await client.chat.completions.create(**create_kwargs)
-            try:
-                async for chunk in response:
-                    done = False
-                    for stream_chunk in self._chunk_to_stream_chunks(chunk):
-                        done = done or stream_chunk.is_final
-                        yield stream_chunk
-                    if done:
-                        break
-            finally:
-                # Release the HTTP response if we broke out early
-                close = getattr(response, "close", None)
-                if callable(close):
-                    maybe_coro = close()
-                    if hasattr(maybe_coro, "__await__"):
-                        await maybe_coro
         except Exception as e:
             raise self._translate_error(e)
+
+        try:
+            async for chunk in response:
+                done = False
+                for stream_chunk in self._chunk_to_stream_chunks(chunk):
+                    done = done or stream_chunk.is_final
+                    yield stream_chunk
+                if done:
+                    break
+        except Exception as e:
+            raise self._translate_error(e)
+        finally:
+            await self._safe_aclose(response)
 
     def count_tokens(self, messages: Sequence[ChatMessage]) -> int:
         """Estimate tokens using tiktoken when available.
@@ -304,7 +335,9 @@ class OpenAIProvider(BaseProvider):
                 provider="openai",
                 status_code=status_code,
             )
-        if "not_found" in error_type.lower():
+        # The SDK's class is ``NotFoundError`` -> ``notfounderror`` after
+        # stripping underscores; a plain ``"not_found"`` substring never matches.
+        if status_code == 404 or "notfound" in error_type.lower().replace("_", ""):
             return ModelNotFoundError(error_str, provider="openai", status_code=status_code)
         if "context_length" in lowered or "maximum context" in lowered:
             return ContextLengthError(error_str, provider="openai", status_code=status_code)

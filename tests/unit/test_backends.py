@@ -251,3 +251,20 @@ class TestOrderByOnDiskColumns:
             b.initialize("t", {"name": "TEXT"})
             with pytest.raises(ValueError, match="Unknown order_by"):
                 b.query("t", order_by="never_existed")
+
+
+class TestIdentifierValidationEdgeCases:
+    def test_trailing_newline_rejected(self, memory_backend):
+        """re.fullmatch closes the ``$``-allows-trailing-newline bypass."""
+        memory_backend.initialize("t", _SCHEMA)
+        with pytest.raises(ValueError, match="identifier"):
+            memory_backend.query("t", order_by="name\n")
+
+    def test_bracket_rejected_in_table_name(self, memory_backend):
+        with pytest.raises(ValueError, match="identifier"):
+            memory_backend.initialize("foo]bar", _SCHEMA)
+
+    def test_bracket_rejected_in_order_by(self, memory_backend):
+        memory_backend.initialize("t", _SCHEMA)
+        with pytest.raises(ValueError, match="identifier"):
+            memory_backend.query("t", order_by="name]")

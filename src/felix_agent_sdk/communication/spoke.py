@@ -356,10 +356,16 @@ class SpokeManager:
 
         Returns:
             The newly created (and optionally connected) Spoke.
+
+        Raises:
+            HubCapacityError: If ``auto_connect`` is requested but the hub is
+                at capacity. The spoke is not registered in that case.
         """
         spoke = Spoke(agent_id=agent_id, hub=self._hub, agent=agent)
-        if auto_connect:
-            spoke.connect(metadata)
+        if auto_connect and not spoke.connect(metadata):
+            raise HubCapacityError(
+                f"Cannot create spoke for {agent_id!r}: hub is at capacity"
+            )
         self._spokes[agent_id] = spoke
         return spoke
 
