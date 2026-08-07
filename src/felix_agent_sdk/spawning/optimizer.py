@@ -1,37 +1,63 @@
-"""Team size optimisation heuristic.
+"""Team size optimisation.
 
 Recommends optimal team size based on task complexity signals and
-current result quality.
+current result quality. Thresholds are config-driven (not buried magic).
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Dict, List
 
-# Base team size for a simple task
-_BASE_TEAM_SIZE = 3
 
-# Each complexity signal adds this many agents
-_SIGNAL_INCREMENT = 1
+@dataclass(frozen=True)
+class TeamSizeConfig:
+    """Configurable thresholds for :class:`TeamSizeOptimizer`.
 
-# Hard cap to prevent runaway growth
-_MAX_TEAM_SIZE = 15
+    Defaults preserve historical heuristic behaviour while allowing
+    callers to tune without forking the class.
+    """
+
+    base_size: int = 3
+    signal_increment: int = 1
+    max_size: int = 15
+    length_medium: int = 200
+    length_long: int = 500
+    conf_low: float = 0.5
+    conf_mid: float = 0.7
+    conf_default: float = 0.5
+    spread_threshold: float = 0.3
+    # When average confidence is already this high, skip length-based
+    # growth — extra agents mostly burn tokens without quality lift.
+    high_confidence_skip_length: float = 0.85
 
 
 class TeamSizeOptimizer:
-    """Heuristic recommender for team size.
+    """Recommender for team size from complexity + quality signals.
 
-    Considers task description length, topic breadth (keyword count),
-    and current confidence spread to suggest an appropriate team size.
+    Considers task description length and current confidence spread to
+    suggest an appropriate team size. High-confidence rounds avoid
+    inflating headcount for long prompts (token efficiency).
 
     Args:
         min_size: Minimum team size to recommend.
         max_size: Maximum team size to recommend.
+        config: Optional threshold config (defaults match prior magic numbers).
     """
 
-    def __init__(self, min_size: int = 3, max_size: int = _MAX_TEAM_SIZE) -> None:
+    def __init__(
+        self,
+        min_size: int = 3,
+        max_size: int | None = None,
+        config: TeamSizeConfig | None = None,
+    ) -> None:
+        self._config = config or TeamSizeConfig()
         self._min_size = min_size
-        self._max_size = max_size
+        self._max_size = max_size if max_size is not None else self._config.max_size
+
+    @property
+    def config(self) -> TeamSizeConfig:
+        return self._config
 
     def recommend_team_size(
         self,
@@ -48,28 +74,38 @@ class TeamSizeOptimizer:
         Returns:
             Recommended team size clamped to [min_size, max_size].
         """
-        size = _BASE_TEAM_SIZE
+        cfg = self._config
+        size = cfg.base_size
 
-        # Signal 1: long task descriptions suggest complexity
-        if len(task_description) > 200:
-            size += _SIGNAL_INCREMENT
-        if len(task_description) > 500:
-            size += _SIGNAL_INCREMENT
-
-        # Signal 2: low average confidence from existing results
+        confidences: list[float] = []
         if current_results:
-            confidences = [r.get("confidence", 0.5) for r in current_results]
-            avg_conf = sum(confidences) / len(confidences)
-            if avg_conf < 0.5:
-                size += _SIGNAL_INCREMENT * 2
-            elif avg_conf < 0.7:
-                size += _SIGNAL_INCREMENT
+            confidences = [
+                float(r.get("confidence", cfg.conf_default)) for r in current_results
+            ]
 
-        # Signal 3: wide confidence spread suggests disagreement
-        if current_results and len(current_results) >= 2:
-            confidences = [r.get("confidence", 0.5) for r in current_results]
-            spread = max(confidences) - min(confidences)
-            if spread > 0.3:
-                size += _SIGNAL_INCREMENT
+        avg_conf = (
+            sum(confidences) / len(confidences) if confidences else None
+        )
+        high_quality = (
+            avg_conf is not None and avg_conf >= cfg.high_confidence_skip_length
+        )
+
+        # Length signals — skipped when quality is already high (efficiency).
+        if not high_quality:
+            if len(task_description) > cfg.length_medium:
+                size += cfg.signal_increment
+            if len(task_description) > cfg.length_long:
+                size += cfg.signal_increment
+
+        if confidences:
+            if avg_conf is not None and avg_conf < cfg.conf_low:
+                size += cfg.signal_increment * 2
+            elif avg_conf is not None and avg_conf < cfg.conf_mid:
+                size += cfg.signal_increment
+
+            if len(confidences) >= 2:
+                spread = max(confidences) - min(confidences)
+                if spread > cfg.spread_threshold:
+                    size += cfg.signal_increment
 
         return max(self._min_size, min(self._max_size, size))

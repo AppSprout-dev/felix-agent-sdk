@@ -38,11 +38,36 @@ class CollaborativeContextBuilder:
     :meth:`add_contribution`. The builder then provides merged context
     for the next round via :meth:`build_context` and
     :meth:`get_context_history`.
+
+    Args:
+        max_chars_per_entry: Hard cap on each contribution's text when
+            building context strings (token efficiency). ``None`` disables.
+        skip_empty: Ignore blank/whitespace-only contributions.
+        recency_decay_rate: Per-second decay applied to contribution age
+            in relevance scoring (default 0.01 → 50 s half-life).
+        recency_max_weight: Maximum score contribution from recency
+            (default 0.5).
+        confidence_weight: Multiplier for contribution confidence in score
+            (default 0.5).
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        max_chars_per_entry: int | None = 4000,
+        skip_empty: bool = True,
+        recency_decay_rate: float = 0.01,
+        recency_max_weight: float = 0.5,
+        confidence_weight: float = 0.5,
+    ) -> None:
         self._contributions: list[Contribution] = []
         self._version: int = 0
+        self._max_chars_per_entry = max_chars_per_entry
+        self._skip_empty = skip_empty
+        self._recency_decay_rate = recency_decay_rate
+        self._recency_max_weight = recency_max_weight
+        self._confidence_weight = confidence_weight
+        # Keyword cache for dedupe — avoids re-tokenizing the same text.
+        self._keyword_cache: dict[int, set[str]] = {}
 
     # ------------------------------------------------------------------
     # Add / query contributions
@@ -66,6 +91,8 @@ class CollaborativeContextBuilder:
         phase: str = "exploration",
     ) -> None:
         """Record an agent's output as a contribution."""
+        if self._skip_empty and not (content or "").strip():
+            return
         self._contributions.append(
             Contribution(
                 agent_id=agent_id,
@@ -106,10 +133,11 @@ class CollaborativeContextBuilder:
 
         parts: list[str] = []
         for contrib, _score in selected:
+            body = self._truncate(contrib.content)
             parts.append(
                 f"[{contrib.agent_id} ({contrib.phase}), "
                 f"confidence={contrib.confidence:.2f}]: "
-                f"{contrib.content}"
+                f"{body}"
             )
         return "\n\n".join(parts)
 
@@ -150,9 +178,9 @@ class CollaborativeContextBuilder:
 
         for contrib in self._contributions[1:]:
             is_dup = False
-            kw_new = self._extract_keywords(contrib.content)
+            kw_new = self._keywords_for(contrib)
             for existing in to_keep:
-                kw_existing = self._extract_keywords(existing.content)
+                kw_existing = self._keywords_for(existing)
                 sim = self._jaccard(kw_new, kw_existing)
                 if sim >= similarity_threshold:
                     is_dup = True
@@ -163,6 +191,11 @@ class CollaborativeContextBuilder:
                 to_keep.append(contrib)
 
         self._contributions = to_keep
+        # Drop keyword entries for removed contributions
+        kept_ids = {id(c) for c in to_keep}
+        self._keyword_cache = {
+            k: v for k, v in self._keyword_cache.items() if k in kept_ids
+        }
         return removed
 
     # ------------------------------------------------------------------
@@ -177,13 +210,30 @@ class CollaborativeContextBuilder:
         now = time.time()
         scored: list[tuple[Contribution, float]] = []
         for contrib in self._contributions:
-            # Recency: more recent = higher (0.0 – 0.5)
+            # Recency: more recent = higher (0.0 – recency_max_weight)
             age = now - contrib.timestamp
-            recency = max(0.0, 0.5 - age * 0.01)
-            # Confidence weight (0.0 – 0.5)
-            conf = contrib.confidence * 0.5
+            recency = max(0.0, self._recency_max_weight - age * self._recency_decay_rate)
+            # Confidence weight (0.0 – confidence_weight)
+            conf = contrib.confidence * self._confidence_weight
             scored.append((contrib, recency + conf))
         return scored
+
+    def _truncate(self, text: str) -> str:
+        limit = self._max_chars_per_entry
+        if limit is None or len(text) <= limit:
+            return text
+        if limit <= 1:
+            return text[:limit]
+        return text[: limit - 1] + "…"
+
+    def _keywords_for(self, contrib: Contribution) -> set[str]:
+        key = id(contrib)
+        cached = self._keyword_cache.get(key)
+        if cached is not None:
+            return cached
+        kw = self._extract_keywords(contrib.content)
+        self._keyword_cache[key] = kw
+        return kw
 
     @staticmethod
     def _extract_keywords(text: str) -> set[str]:

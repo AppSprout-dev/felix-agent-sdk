@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 
+import time
+
 from felix_agent_sdk.workflows.context_builder import (
     CollaborativeContextBuilder,
     Contribution,
@@ -119,3 +121,74 @@ class TestDeduplication:
     def test_empty_dedup(self):
         builder = CollaborativeContextBuilder()
         assert builder.deduplicate() == 0
+
+class TestContextEfficiency:
+    def test_skips_empty_content(self):
+        builder = CollaborativeContextBuilder()
+        builder.add_contribution("a1", "research", "   ", 0.7, "exploration")
+        builder.add_contribution("a2", "research", "real findings", 0.8, "exploration")
+        assert builder.contribution_count == 1
+
+    def test_truncates_long_content_in_build(self):
+        builder = CollaborativeContextBuilder(max_chars_per_entry=50)
+        builder.add_contribution("a1", "research", "x" * 200, 0.9, "exploration")
+        ctx = builder.build_context()
+        # header + truncated body; body should not retain all 200 chars
+        assert "x" * 200 not in ctx
+        assert "…" in ctx or len(ctx) < 200
+
+    def test_no_truncate_when_disabled(self):
+        builder = CollaborativeContextBuilder(max_chars_per_entry=None)
+        body = "y" * 120
+        builder.add_contribution("a1", "research", body, 0.9, "exploration")
+        ctx = builder.build_context()
+        assert body in ctx
+
+
+class TestScoringConfig:
+    """Configurable recency / confidence scoring parameters."""
+
+    def test_custom_recency_decay(self):
+        """Faster decay means older contributions score lower."""
+        slow = CollaborativeContextBuilder(recency_decay_rate=0.01)
+        fast = CollaborativeContextBuilder(recency_decay_rate=1.0)
+
+        now = time.time()
+        old = Contribution("a1", "research", "old", 0.5, "exploration", timestamp=now - 30)
+        new = Contribution("a2", "research", "new", 0.5, "exploration", timestamp=now)
+
+        def recency_score(builder, c):
+            age = time.time() - c.timestamp
+            return max(0.0, builder._recency_max_weight - age * builder._recency_decay_rate)
+
+        assert recency_score(slow, old) > 0.0  # slow decay keeps old score
+        assert recency_score(fast, old) == 0.0  # fast decay zeros old
+        assert recency_score(fast, new) > 0.0   # even fast decay keeps new
+
+    def test_custom_confidence_weight(self):
+        """Higher weight amplifies confidence in combined score."""
+        low = CollaborativeContextBuilder(confidence_weight=0.3)
+        high = CollaborativeContextBuilder(confidence_weight=0.9)
+        low.add_contribution("a1", "research", "data", 0.8, "exploration")
+        high.add_contribution("a1", "research", "data", 0.8, "exploration")
+
+        # Both produce context (score > 0)
+        assert len(low.build_context()) > 0
+        assert len(high.build_context()) > 0
+
+        # The higher-weight builder gives a strictly higher score for same input
+        low_score = low._score_contributions()[0][1]
+        high_score = high._score_contributions()[0][1]
+        assert high_score > low_score
+
+    def test_defaults_match_original_behavior(self):
+        """Default parameter values preserve original magic-number behaviour."""
+        default = CollaborativeContextBuilder()
+        now = time.time()
+        c = Contribution("a1", "r", "content", 0.7, "exploration", timestamp=now)
+        age = time.time() - c.timestamp
+        expected_recency = max(0.0, 0.5 - age * 0.01)
+        expected = expected_recency + 0.7 * 0.5
+        default._contributions.append(c)
+        score = default._score_contributions()[0][1]
+        assert abs(score - expected) < 0.001

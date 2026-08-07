@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from felix_agent_sdk.spawning.optimizer import TeamSizeOptimizer
+from felix_agent_sdk.spawning.optimizer import TeamSizeConfig, TeamSizeOptimizer
 
 
 class TestTeamSizeOptimizer:
@@ -34,6 +34,20 @@ class TestTeamSizeOptimizer:
         results = [{"confidence": 0.9, "content": "strong"} for _ in range(3)]
         size = opt.recommend_team_size("Short", results)
         assert size == 3
+
+    def test_high_confidence_skips_length_growth(self):
+        """Token efficiency: high-quality rounds should not grow for long prompts."""
+        opt = TeamSizeOptimizer()
+        results = [{"confidence": 0.95, "content": "solid"} for _ in range(3)]
+        size = opt.recommend_team_size("x" * 600, results)
+        assert size == 3
+
+    def test_config_overrides_thresholds(self):
+        cfg = TeamSizeConfig(base_size=2, length_medium=10, length_long=20)
+        opt = TeamSizeOptimizer(min_size=1, config=cfg)
+        assert opt.recommend_team_size("short") == 2
+        assert opt.recommend_team_size("x" * 15) == 3
+        assert opt.recommend_team_size("x" * 25) == 4
 
     def test_wide_spread_increases_size(self):
         opt = TeamSizeOptimizer()
