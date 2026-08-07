@@ -90,7 +90,8 @@ class DynamicSpawner(EventEmitterMixin):
         }
         self._monitor.record_round(confidences)
 
-        # Check if spawning is recommended
+        # Fast path: high confidence → no spawn and no coverage analysis
+        # (avoids an extra LLM-shaped pass over round contents).
         if not self._monitor.should_spawn():
             return []
 

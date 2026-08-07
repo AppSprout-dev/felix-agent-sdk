@@ -9,7 +9,7 @@ from felix_agent_sdk.spawning.confidence_monitor import (
     SpawnRecommendation,
 )
 from felix_agent_sdk.spawning.content_analyzer import ContentAnalyzer, CoverageReport
-from felix_agent_sdk.spawning.optimizer import TeamSizeOptimizer
+from felix_agent_sdk.spawning.optimizer import TeamSizeConfig, TeamSizeOptimizer
 from felix_agent_sdk.spawning.spawner import DynamicSpawner
 
 __all__ = [
@@ -18,6 +18,7 @@ __all__ = [
     "SpawnRecommendation",
     "ContentAnalyzer",
     "CoverageReport",
+    "TeamSizeConfig",
     "TeamSizeOptimizer",
     "DynamicSpawner",
 ]
